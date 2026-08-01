@@ -81,7 +81,7 @@ function Admin() {
     const { data: withdrawalData, error: withdrawalError } = await supabase
   .from("withdrawals")
   .select("*")
-  .order("created_at", { ascending:false });
+ 
 
 
 if(withdrawalError){
@@ -95,11 +95,10 @@ if(withdrawalError){
 setWithdrawals(withdrawalData);
 
 console.log("MY WITHDRAWALS:", withdrawalData);
-
 const { data: verificationData, error: verificationError } = await supabase
-.from("verifications")
-.select("*")
-.order("created_at", { ascending:false });
+  .from("verifications")
+  .select("*")
+  .order("created_at", { ascending: false });
 
 
 if(verificationError){
@@ -697,7 +696,7 @@ const rejectVerification = async(id)=>{
               </td>
 
 <td className="p-3 break-all max-w-[250px]">
-                    {withdrawal.wallet_address}
+                    {withdrawal.wallet_adress}
               </td>
 
 
