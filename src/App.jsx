@@ -13,6 +13,7 @@ import Transactions from "./pages/Transactions";
 import Wallet from "./pages/Wallet";
 import Withdraw from "./pages/Withdraw";
 import Deposit from "./pages/Deposit";
+import Trade from "./pages/Trade";
 import LogoutButton from "./components/LogoutButton";
 import MarketOverview from "./components/MarketOverview";
 console.log("APP LOADED");
@@ -72,6 +73,13 @@ className="md:hidden absolute top-4 right-4 text-xl"
   >
     Dashboard
   </Link>
+  <Link
+  to="/trade"
+  onClick={()=>setMenuOpen(false)}
+  className="bg-green-500 hover:bg-green-600 px-4 py-2 rounded-lg font-bold text-center"
+>
+  Trade
+</Link>
 
 
   <Link 
@@ -256,7 +264,10 @@ function App() {
           path="/wallet"
           element={<Wallet />}
         />
-
+        <Route
+  path="/trade"
+  element={<Trade />}
+/>
 
         <Route
           path="/verification"
