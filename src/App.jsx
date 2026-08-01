@@ -15,10 +15,12 @@ import Withdraw from "./pages/Withdraw";
 import Deposit from "./pages/Deposit";
 
 import MarketOverview from "./components/MarketOverview";
+console.log("APP LOADED");
 
 function Layout({ children }) {
 
   const location = useLocation();
+    const [menuOpen, setMenuOpen] = useState(false);
 
 
   const hideLayout =
@@ -33,54 +35,110 @@ function Layout({ children }) {
 
   return (
 
-<div className="min-h-screen bg-gray-950 text-white flex overflow-x-hidden">
-<aside className="w-64 min-w-64 bg-gray-900 p-6">
-        <h1 className="text-2xl font-bold text-blue-400 mb-8">
-          CashPrime
-        </h1>
 
-        <nav className="flex flex-col gap-4">
+<div className="min-h-screen bg-gray-950 text-white flex flex-col md:flex-row overflow-x-hidden">
 
-  <Link to="/" className="hover:text-blue-400">
+<aside
+className={`
+fixed md:static
+top-0 left-0
+h-screen
+w-64
+bg-gray-900
+p-6
+shrink-0
+transform
+transition-transform
+duration-300
+z-50
+${menuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+`}
+>
+    <h1 className="text-2xl font-bold text-blue-400 mb-8">
+      CashPrime
+    </h1>
+    <button
+onClick={()=>setMenuOpen(false)}
+className="md:hidden absolute top-4 right-4 text-xl"
+>
+✕
+</button>
+
+    <nav className="flex flex-col space-y-4">
+
+  <Link 
+    to="/"
+    onClick={()=>setMenuOpen(false)}
+  >
     Dashboard
   </Link>
 
-  <Link to="/wallet" className="hover:text-blue-400">
+
+  <Link 
+    to="/wallet"
+    onClick={()=>setMenuOpen(false)}
+  >
     Wallet
   </Link>
 
-  <Link to="/deposit" className="hover:text-blue-400">
+
+  <Link 
+    to="/deposit"
+    onClick={()=>setMenuOpen(false)}
+  >
     Deposit
   </Link>
 
-  <Link to="/withdraw" className="hover:text-blue-400">
+
+  <Link 
+    to="/withdraw"
+    onClick={()=>setMenuOpen(false)}
+  >
     Withdraw
   </Link>
 
-  <Link to="/transactions" className="hover:text-blue-400">
+
+  <Link 
+    to="/transactions"
+    onClick={()=>setMenuOpen(false)}
+  >
     Transactions
   </Link>
 
-  <Link to="/verification" className="hover:text-blue-400">
+
+  <Link 
+    to="/verification"
+    onClick={()=>setMenuOpen(false)}
+  >
     ID Verification
   </Link>
 
-  <Link to="/settings" className="hover:text-blue-400">
+
+  <Link 
+    to="/settings"
+    onClick={()=>setMenuOpen(false)}
+  >
     Settings
   </Link>
 
 </nav>
-
-      </aside>
-
-
-<main className="flex-1 p-8 overflow-x-hidden">
-        {children}
-
-      </main>
+  </aside>
 
 
-    </div>
+<main className="flex-1 w-full min-w-0 p-4 md:p-8">
+
+<button
+onClick={() => setMenuOpen(true)}
+className="md:hidden bg-gray-900 p-3 rounded mb-4"
+>
+☰
+</button>
+    {children}
+
+  </main>
+
+
+</div>
 
   );
 

@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import UsersTable from "../components/admin/UsersTable.jsx";
 
-
+console.log("ADMIN LOADED");
 function Admin() {
 
 
   const [users, setUsers] = useState([]);
   const [deposits, setDeposits] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
+  const [verifications, setVerifications] = useState([]);
 
 
 
@@ -92,7 +94,43 @@ if(withdrawalError){
 
 setWithdrawals(withdrawalData);
 
-  };
+console.log("MY WITHDRAWALS:", withdrawalData);
+
+const { data: verificationData, error: verificationError } = await supabase
+.from("verifications")
+.select("*")
+.order("created_at", { ascending:false });
+
+
+if(verificationError){
+
+  console.log(verificationError);
+  return;
+
+}
+
+const verificationWithUsers = await Promise.all(
+  verificationData.map(async (verification)=>{
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("name,email")
+      .eq("id", verification.user_id)
+      .maybeSingle();
+
+
+    return {
+      ...verification,
+      profile
+    };
+
+  })
+);
+
+
+setVerifications(verificationWithUsers);
+
+console.log("MY VERIFICATIONS DETAIL:", JSON.stringify(verificationWithUsers, null, 2));  };
 
   useEffect(()=>{
 
@@ -357,12 +395,61 @@ setWithdrawals(withdrawalData);
     }
 
     alert("Withdrawal rejected");
+    
 
     fetchData();
 
 
   };
+const approveVerification = async(id)=>{
 
+  const {error} = await supabase
+  .from("verifications")
+  .update({
+    status:"Approved"
+  })
+  .eq("id", id);
+
+
+  if(error){
+
+    alert(error.message);
+    return;
+
+  }
+
+
+  alert("Verification approved");
+
+  fetchData();
+
+};
+
+
+
+const rejectVerification = async(id)=>{
+
+  const {error} = await supabase
+  .from("verifications")
+  .update({
+    status:"Rejected"
+  })
+  .eq("id", id);
+
+
+  if(error){
+
+    alert(error.message);
+    return;
+
+  }
+
+
+  alert("Verification rejected");
+
+  fetchData();
+
+};
   return (
 
 <div className="p-8 text-white">
@@ -438,112 +525,11 @@ setWithdrawals(withdrawalData);
 
       </div>
 
-      <div className="bg-gray-900 p-6 rounded-xl mb-8">
-
-
-        <h2 className="text-xl font-bold mb-4">
-          Users Management
-        </h2>
-        
-          <table className="w-full text-left text-sm">
-
-          <thead className="text-gray-400">
-
-            <tr>
-
-              <th className="p-3">Email</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Balance</th>
-              <th className="p-3">Action</th>
-
-            </tr>
-
-          </thead>
-
-          <tbody>
-
-          {
-            users.map((user)=>(
-
-            <tr
-            key={user.id}
-            className="border-t border-gray-800"
-            >
-
-              <td className="p-3">
-                {user.email}
-              </td>
-
-              <td className="p-3">
-
-              <select
-
-              value={user.status || "Pending"}
-
-              onChange={(e)=>{
-
-                user.status=e.target.value;
-
-                setUsers([...users]);
-
-              }}
-
-              className="bg-gray-800 p-2 rounded"
-
-              >
-
-                <option>
-                  Pending
-                </option>
-
-                <option>
-                  Active
-                </option>
-
-                <option>
-                  Blocked
-                </option>
-
-
-              </select>
-
-
-              </td>
-
-              <td className="p-3">
-
-              {user.wallet?.balance || 0}
-
-              </td>
-
-              <td className="p-3">
-
-              <button
-
-              onClick={()=>updateUser(user)}
-
-              className="bg-blue-500 px-4 py-2 rounded"
-
-              >
-
-              Save
-
-              </button>
-
-
-              </td>
-
-
-            </tr>
-
-            ))
-          }
-
-          </tbody>
-
-        </table>
-
-      </div>
+  <UsersTable
+  users={users}
+  setUsers={setUsers}
+  updateUser={updateUser}
+/>
 
       <div className="bg-gray-900 p-6 rounded-xl mb-8">
 
@@ -759,7 +745,128 @@ setWithdrawals(withdrawalData);
 
         </table>
 
+<div className="bg-gray-900 p-6 rounded-xl mt-8">
 
+
+<h2 className="text-xl font-bold mb-4">
+  ID Verification Requests
+</h2>
+
+
+<table className="w-full text-left">
+
+
+<thead className="text-gray-400">
+
+<tr>
+
+<th className="p-3">
+Name
+</th>
+
+<th className="p-3">
+Email
+</th>
+
+<th className="p-3">
+Document
+</th>
+
+<th className="p-3">
+Status
+</th>
+
+<th className="p-3">
+Action
+</th>
+
+</tr>
+
+</thead>
+
+
+<tbody>
+
+{
+verifications.map((verification)=>(
+
+<tr
+key={verification.id}
+className="border-t border-gray-800"
+>
+
+
+<td className="p-3">
+{verification.profile?.name}
+</td>
+
+<td className="p-3">
+{verification.profile?.email}
+</td>
+
+
+<td className="p-3">
+
+<a
+href={verification.document_url}
+target="_blank"
+className="text-blue-400"
+>
+View Document
+</a>
+
+</td>
+
+
+<td className="p-3">
+{verification.status}
+</td>
+
+
+<td className="p-3">
+
+{
+verification.status === "Pending" &&
+
+<>
+
+<button
+onClick={()=>approveVerification(verification.id)}
+className="bg-green-500 px-3 py-2 rounded mr-2"
+>
+Approve
+</button>
+
+
+<button
+onClick={()=>rejectVerification(verification.id)}
+className="bg-red-500 px-3 py-2 rounded"
+>
+Reject
+</button>
+
+</>
+
+}
+
+
+</td>
+
+
+</tr>
+
+))
+
+}
+
+
+</tbody>
+
+
+</table>
+
+
+</div>
       </div>
 
 
