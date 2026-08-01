@@ -13,7 +13,7 @@ import Transactions from "./pages/Transactions";
 import Wallet from "./pages/Wallet";
 import Withdraw from "./pages/Withdraw";
 import Deposit from "./pages/Deposit";
-
+import LogoutButton from "./components/LogoutButton";
 import MarketOverview from "./components/MarketOverview";
 console.log("APP LOADED");
 
@@ -120,6 +120,8 @@ className="md:hidden absolute top-4 right-4 text-xl"
   >
     Settings
   </Link>
+  
+  <LogoutButton />
 
 </nav>
   </aside>
