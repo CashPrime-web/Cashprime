@@ -451,8 +451,8 @@ const rejectVerification = async(id)=>{
 };
   return (
 
-<div className="p-8 text-white">
-      <h1 className="text-3xl font-bold mb-6">
+<div className="p-4 md:p-8 text-white overflow-x-hidden">
+        <h1 className="text-3xl font-bold mb-6">
         Admin Dashboard
       </h1>
 
@@ -536,9 +536,9 @@ const rejectVerification = async(id)=>{
       <h2 className="text-xl font-bold mb-4">
         Deposit Requests
       </h2>
+      <div className="overflow-x-auto w-full">
 
-<table className="w-full text-left text-sm">
-
+<table className="w-full min-w-[700px] text-left text-sm">
       <thead className="text-gray-400">
 
       <tr>
@@ -591,33 +591,23 @@ const rejectVerification = async(id)=>{
         <td className="p-3">
 
 
-        {
-        deposit.status==="Pending" &&
+        {deposit.status==="Pending" && (
+<>
+<button
+onClick={()=>approveDeposit(deposit)}
+className="bg-green-500 px-3 py-2 rounded mr-2"
+>
+Approve
+</button>
 
-        <>
-
-        <button
-
-        onClick={()=>approveDeposit(deposit)}
-
-        className="bg-green-500 px-3 py-2 rounded mr-2"
-
-        >
-        Approve
-        </button>
-
-        <button
-
-        onClick={()=>rejectDeposit(deposit)}
-
-        className="bg-red-500 px-3 py-2 rounded"
-
-        >
-        Reject
-        </button>
-        </>
-
-        }
+<button
+onClick={()=>rejectDeposit(deposit)}
+className="bg-red-500 px-3 py-2 rounded"
+>
+Reject
+</button>
+</>
+)}
 
         </td>
 
@@ -631,7 +621,7 @@ const rejectVerification = async(id)=>{
 
            </table>
 
-
+</div>
       </div>     
 
       {/* Withdrawal Requests */}
@@ -644,8 +634,9 @@ const rejectVerification = async(id)=>{
         </h2>
 
 
-        <table className="w-full text-left">
+<div className="overflow-x-auto">
 
+  <table className="w-full min-w-[700px] text-left">
 
           <thead className="text-gray-400">
 
@@ -743,6 +734,10 @@ const rejectVerification = async(id)=>{
 
 
         </table>
+</div>
+
+        </div>
+
 
 <div className="bg-gray-900 p-6 rounded-xl mt-8">
 
@@ -750,9 +745,9 @@ const rejectVerification = async(id)=>{
 <h2 className="text-xl font-bold mb-4">
   ID Verification Requests
 </h2>
+<div className="overflow-x-auto w-full">
 
-
-<table className="w-full text-left">
+<table className="w-full min-w-[700px] text-left">
 
 
 <thead className="text-gray-400">
@@ -824,29 +819,23 @@ View Document
 
 <td className="p-3">
 
-{
-verification.status === "Pending" &&
+{verification.status === "Pending" && (
+  <>
+    <button
+      onClick={()=>approveVerification(verification.id)}
+      className="bg-green-500 px-3 py-2 rounded mr-2"
+    >
+      Approve
+    </button>
 
-<>
-
-<button
-onClick={()=>approveVerification(verification.id)}
-className="bg-green-500 px-3 py-2 rounded mr-2"
->
-Approve
-</button>
-
-
-<button
-onClick={()=>rejectVerification(verification.id)}
-className="bg-red-500 px-3 py-2 rounded"
->
-Reject
-</button>
-
-</>
-
-}
+    <button
+      onClick={()=>rejectVerification(verification.id)}
+      className="bg-red-500 px-3 py-2 rounded"
+    >
+      Reject
+    </button>
+  </>
+)}
 
 
 </td>
