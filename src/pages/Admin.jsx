@@ -382,26 +382,12 @@ if(error){
 alert("Withdrawal approved");
 fetchData();
 
-console.log("FULL WITHDRAWAL UPDATE:", {
-  id: withdrawal.id,
-  data,
-  error
-});
 console.log("ID DIE IK UPDATE:", withdrawal.id);
-console.log("UPDATE DATA:", data);
 console.log("UPDATE ERROR:", error);
 
-console.log("NIEUWE CODE BEREIKT");    if(error){
+alert("Withdrawal approved");
 
-      alert(error.message);
-      return;
-
-    }
-
-    alert("Withdrawal approved");
-
-    fetchData();
-
+fetchData();
   };
 
   const rejectWithdrawal = async(withdrawal)=>{
