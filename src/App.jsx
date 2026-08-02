@@ -77,7 +77,7 @@ function Layout({ children }) {
             ✕
           </button>
 
-          {/* Navigation */}
+          {/* Navigatie */}
           <nav className="flex flex-col space-y-2">
             <Link
               to="/"
@@ -150,7 +150,7 @@ function Layout({ children }) {
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
+      {/* HOOFDINHOUD */}
       <main className="flex-1 w-full min-w-0 p-4 md:p-8 bg-gradient-to-b from-[#0b0e14] to-[#111622]">
         <button
           onClick={() => setMenuOpen(true)}
@@ -202,11 +202,52 @@ function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
-          <Route path="/wallet" element={<Wallet />} />
-          <Route path="/trade" element={<Trade />} />
-          <Route path="/exchange" element={<Exchange />} />
-          <Route path="/transfer" element={<Transfer />} />
-          <Route path="/verification" element={<Verification />} />
+
+          {/* BEVEILIGDE ROUTES (Ingelogde gebruikers) */}
+          <Route
+            path="/wallet"
+            element={
+              <ProtectedRoute>
+                <Wallet />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/trade"
+            element={
+              <ProtectedRoute>
+                <Trade />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/exchange"
+            element={
+              <ProtectedRoute>
+                <Exchange />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/transfer"
+            element={
+              <ProtectedRoute>
+                <Transfer />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/verification"
+            element={
+              <ProtectedRoute>
+                <Verification />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="/transactions"
@@ -248,7 +289,7 @@ function App() {
           <Route
             path="/"
             element={
-              <>
+              <ProtectedRoute>
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                   <div>
                     <h2 className="text-3xl font-extrabold tracking-tight">
@@ -289,7 +330,7 @@ function App() {
                       </div>
                     </div>
 
-                    {/* SNELMENU KNOFFEN DIRECT GEKOPPELD NAAR EXACT DIEZELFDE PAGES */}
+                    {/* SNELMENU KNOFFEN DIRECT NAAR PROTECTED ROUTES */}
                     <div className="grid grid-cols-4 gap-2 pt-4 border-t border-white/15 text-center">
                       <Link
                         to="/withdraw"
@@ -399,7 +440,7 @@ function App() {
                     </div>
                   ))}
                 </div>
-              </>
+              </ProtectedRoute>
             }
           />
         </Routes>
