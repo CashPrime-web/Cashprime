@@ -81,6 +81,8 @@ function Admin() {
     const { data: withdrawalData, error: withdrawalError } = await supabase
   .from("withdrawals")
   .select("*")
+
+  console.log("WITHDRAWAL TEST:", withdrawalData, withdrawalError);
  
 
 
@@ -353,15 +355,15 @@ console.log("MY VERIFICATIONS DETAIL:", JSON.stringify(verificationWithUsers, nu
 
     }
 
-    const {error}= await supabase
-    .from("withdrawals")
-    .update({
+    const {data, error}= await supabase
+  .from("withdrawals")
+  .update({
+    status: "Approved"
+  })
+  .eq("id", withdrawal.id)
+  .select();
 
-      status:"Approved"
-
-    })
-    .eq("id",withdrawal.id);
-
+console.log("WITHDRAWAL UPDATE:", data, error);
     if(error){
 
       alert(error.message);
