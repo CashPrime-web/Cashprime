@@ -7,6 +7,7 @@ export default function Transfer() {
   const [amount, setAmount] = useState("");
   const [exchangeBalance, setExchangeBalance] = useState(0);
   const [tradingBalance, setTradingBalance] = useState(0);
+  const [totalBalance, setTotalBalance] = useState(0);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -24,8 +25,16 @@ export default function Transfer() {
         .single();
       
       if (data) {
-        setExchangeBalance(Number(data.balance || 0));
-        setTradingBalance(Number(data.trading_balance || 0));
+        const total = Number(data.balance || 0);
+        const trading = Number(data.trading_balance || 0);
+        
+        // De Exchange balance is het totale tegoed minus wat er al in Trade staat, 
+        // zodat de som altijd netjes klopt (bijv. 475 totaal = 75 exchange + 400 trade)
+        const exchange = Math.max(0, total - trading);
+
+        setTotalBalance(total);
+        setExchangeBalance(exchange);
+        setTradingBalance(trading);
       }
     }
   };
@@ -40,15 +49,12 @@ export default function Transfer() {
       return;
     }
 
-    // Controleer of er van Exchange naar Trade wordt overgemaakt
     if (fromAccount === "Exchange" && toAccount === "Trade") {
       if (transferAmount > exchangeBalance) {
         setMessage("⚠️ Insufficient funds in Exchange Account.");
         return;
       }
-    } 
-    // Of andersom: van Trade naar Exchange
-    else if (fromAccount === "Trade" && toAccount === "Exchange") {
+    } else if (fromAccount === "Trade" && toAccount === "Exchange") {
       if (transferAmount > tradingBalance) {
         setMessage("⚠️ Insufficient funds in Trade Account.");
         return;
@@ -65,23 +71,18 @@ export default function Transfer() {
       return;
     }
 
-    // Bereken nieuwe saldi
-    let newExchange = exchangeBalance;
     let newTrading = tradingBalance;
 
-    if (fromAccount === "Exchange") {
-      newExchange -= transferAmount;
-      newTrading += transferAmount;
-    } else {
-      newExchange += transferAmount;
-      newTrading -= transferAmount;
+    if (fromAccount === "Exchange" && toAccount === "Trade") {
+      newTrading += transferAmount; // Geld gaat van exchange naar trade
+    } else if (fromAccount === "Trade" && toAccount === "Exchange") {
+      newTrading -= transferAmount; // Geld gaat terug naar exchange
     }
 
-    // Update in Supabase database
+    // We updaten de trading_balance. De hoofdbalk (balance / asset valuation) blijft onaangetast ($475).
     const { error } = await supabase
       .from("wallets")
       .update({
-        balance: parseFloat(newExchange.toFixed(2)),
         trading_balance: parseFloat(newTrading.toFixed(2)),
       })
       .eq("user_id", user.id);
@@ -93,11 +94,10 @@ export default function Transfer() {
     } else {
       setMessage(`✅ Successfully transferred $${transferAmount.toFixed(2)} from ${fromAccount} to ${toAccount}!`);
       setAmount("");
-      fetchBalances(); // Herlaad de balansen direct op het scherm
+      fetchBalances();
     }
   };
 
-  // Bepaal wat het 'Available' saldo onder het invoerveld moet laten zien
   const currentAvailable = fromAccount === "Exchange" ? exchangeBalance : tradingBalance;
 
   return (

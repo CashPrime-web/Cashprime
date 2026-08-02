@@ -86,7 +86,7 @@ function Admin() {
 
     setVerifications(verificationWithUsers);
 
-    // Haal trading signaal op (Zoekt op ID 1 of een actieve)
+    // Haal trading signaal op uit de database
     const { data: sigData } = await supabase
       .from("trading_signals")
       .select("*")
@@ -110,7 +110,7 @@ function Admin() {
     fetchData();
   }, []);
 
-  // Update Max Daily Trades per gebruiker (2, 3 of 4)
+  // Update Max Daily Trades per gebruiker
   const handleUpdateMaxTrades = async (userId, maxTrades) => {
     const { error } = await supabase
       .from("profiles")
@@ -125,7 +125,7 @@ function Admin() {
     }
   };
 
-  // Signaal Updaten MET UPSERT (Garandeert dat het altijd opslaat)
+  // Signaal Updaten MET UPSERT (Slaat jouw gekozen percentage direct op in de database!)
   const handleUpdateSignal = async (e) => {
     e.preventDefault();
     setSignalMsg("");
@@ -359,7 +359,7 @@ function Admin() {
         </form>
       </div>
 
-      {/* 2. GEBRUIKERS BEHEREN + MAX TRADES INSTELLEN (2, 3 of 4) */}
+      {/* 2. GEBRUIKERS BEHEREN + MAX TRADES INSTELLEN */}
       <div className="bg-gray-900 p-6 rounded-xl">
         <h2 className="text-xl font-bold mb-4">Manage Daily Trades Permission per User</h2>
         <p className="text-xs text-gray-400 mb-4">Standard: 2 trades (10 AM & 12 PM). You can give specific users access to 3 trades (2 PM) or 4 trades (3 PM).</p>

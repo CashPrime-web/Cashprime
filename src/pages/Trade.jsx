@@ -10,10 +10,6 @@ function Trade() {
   const [totalProfit, setTotalProfit] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Recharge state
-  const [rechargeAmount, setRechargeAmount] = useState("");
-  const [rechargeMsg, setRechargeMsg] = useState("");
-
   // Klok voor tijdscontrole elke 10 seconden
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 10000);
@@ -43,13 +39,16 @@ function Trade() {
       .maybeSingle();
     setUserProfile(profile);
 
-    // 2. Haal wallet
+    // 2. Haal wallet (inclusief trading_balance)
     const { data: walletData } = await supabase
       .from("wallets")
       .select("*")
       .eq("user_id", user.id)
       .maybeSingle();
-    setWallet(walletData);
+    
+    if (walletData) {
+      setWallet(walletData);
+    }
 
     // 3. Haal actueel ingestelde signaal
     const { data: sigData } = await supabase
@@ -89,9 +88,34 @@ function Trade() {
 
   useEffect(() => {
     fetchAppData();
+    
+    // Optioneel: luister naar realtime wijzigingen in de wallets tabel zodat de Trade-pagina direct update als je getransferd hebt!
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const channel = supabase
+      .channel("wallet-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "wallets",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            setWallet(payload.new);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
-  // Controleer of trade geopend mag worden (10 min vooraf)
   const isTradeUnlocked = (tradeNum) => {
     const config = scheduleTimes[tradeNum];
     if (!config) return false;
@@ -106,48 +130,7 @@ function Trade() {
     return now >= unlockTime && now <= endTime;
   };
 
-  // RECHARGE / TRANSFER NAAR TRADING BALANCE
-  const handleRecharge = async () => {
-    setRechargeMsg("");
-    const amount = parseFloat(rechargeAmount);
-
-    if (isNaN(amount) || amount <= 0) {
-      setRechargeMsg("⚠️ Enter a valid amount.");
-      return;
-    }
-
-    const currentExchangeBalance = Number(wallet?.balance || 0);
-    if (amount > currentExchangeBalance) {
-      setRechargeMsg("⚠️ Insufficient exchange balance for this recharge.");
-      return;
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const newBalance = currentExchangeBalance - amount;
-    const newTradingBalance = Number(wallet?.trading_balance || 0) + amount;
-
-    const { error } = await supabase
-      .from("wallets")
-      .update({
-        balance: parseFloat(newBalance.toFixed(2)),
-        trading_balance: parseFloat(newTradingBalance.toFixed(2)),
-      })
-      .eq("user_id", user.id);
-
-    if (error) {
-      setRechargeMsg("Error recharging: " + error.message);
-    } else {
-      setRechargeMsg(`✅ Successfully recharged $${amount.toFixed(2)} to Trading Balance!`);
-      setRechargeAmount("");
-      fetchAppData();
-    }
-  };
-
-  // UITVOEREN VAN TRADE (Gebruikt nu Trading Balance voor de berekening)
+  // UITVOEREN VAN TRADE (Berekent winst over de trading balance en telt op bij Total Balance & Earnings)
   const handleExecuteTrade = async (tradeNum) => {
     setLoading(true);
 
@@ -159,23 +142,25 @@ function Trade() {
       return;
     }
 
-    const activeProfitPct = signal ? parseFloat(signal.profit_percentage) : 3.5;
+    const activeProfitPct = signal ? parseFloat(signal.profit_percentage) : 2.0; 
     const currentTradingBalance = Number(wallet.trading_balance || 0);
-    const currentBalance = Number(wallet.balance || 0);
+    const currentTotalBalance = Number(wallet.balance || 0); // Asset Valuation (bijv. 475)
 
     if (currentTradingBalance <= 0) {
-      alert("⚠️ Your trading balance is $0.00. Please recharge your trading account first.");
+      alert("⚠️ Your trading balance is $0.00. Please transfer funds to your trading account first.");
       setLoading(false);
       return;
     }
 
-    // Winstberekening op basis van de Trading Balance
+    // 1. Winstberekening over de actuele trading balance (bijv. 2% over $400 = $8.00)
     const profitAmount = currentTradingBalance * (activeProfitPct / 100);
+    
+    // 2. Nieuwe waardes berekenen
     const newTradingBalance = currentTradingBalance + profitAmount;
-    const newTotalBalance = currentBalance + profitAmount;
+    const newTotalBalance = currentTotalBalance + profitAmount; // 475 + 8 = 483
     const newTodaysEarnings = Number(wallet.todays_earnings || 0) + profitAmount;
 
-    // 1. Opslaan in user_trades
+    // 3. Opslaan in user_trades logboek
     const { error: tradeErr } = await supabase.from("user_trades").insert([
       {
         user_id: user.id,
@@ -193,7 +178,7 @@ function Trade() {
       return;
     }
 
-    // 2. Bijwerken in wallet (zowel balance, trading_balance als todays_earnings)
+    // 4. Wallet bijwerken in Supabase
     const { error: walletErr } = await supabase
       .from("wallets")
       .update({
@@ -208,8 +193,8 @@ function Trade() {
     if (walletErr) {
       alert("Error updating wallet: " + walletErr.message);
     } else {
-      alert(`✅ Trade #${tradeNum} Executed! Profit added: +$${profitAmount.toFixed(2)} (${activeProfitPct}%)`);
-      fetchAppData();
+        alert(`✅ Trade #${tradeNum} Executed! Profit added: +$${profitAmount.toFixed(2)} (${activeProfitPct}%)`);
+        fetchAppData();
     }
   };
 
@@ -232,20 +217,21 @@ function Trade() {
         </span>
       </div>
 
-      {/* DASHBOARD CARDS / STATS (Inclusief Trading Balance) */}
+      {/* DASHBOARD CARDS / STATS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* TOTAL BALANCE */}
+        
+        {/* ASSET VALUATION / TOTAL BALANCE */}
         <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
-          <p className="text-xs text-gray-400 font-semibold uppercase">Total Balance</p>
+          <p className="text-xs text-gray-400 font-semibold uppercase">Asset Valuation</p>
           <h2 className="text-2xl font-black text-white mt-2">
             ${wallet?.balance ? Number(wallet.balance).toFixed(2) : "0.00"}
           </h2>
           <p className="text-xs text-emerald-400 mt-2 font-medium">
-            ✓ Includes deposits & trade profits
+            ✓ Base capital + cumulative earnings
           </p>
         </div>
 
-        {/* TRADING BALANCE (Zichtbaar gemaakt voor de klant) */}
+        {/* TRADING BALANCE */}
         <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
           <p className="text-xs text-gray-400 font-semibold uppercase">Trading Balance</p>
           <h2 className="text-2xl font-black text-amber-400 mt-2">
@@ -273,41 +259,6 @@ function Trade() {
         </div>
       </div>
 
-      {/* RECHARGE MODULE */}
-      <div className="bg-gray-900 p-6 rounded-2xl border border-gray-800 space-y-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h2 className="text-lg font-bold">Recharge Trading Account</h2>
-            <p className="text-xs text-gray-400">Transfer funds into active trading balance.</p>
-          </div>
-          <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1 rounded-full font-semibold">
-            Internal Transfer
-          </span>
-        </div>
-
-        {rechargeMsg && (
-          <div className="p-3 rounded bg-gray-800 text-xs font-semibold text-amber-400 border border-gray-700">
-            {rechargeMsg}
-          </div>
-        )}
-
-        <div className="flex gap-4 items-center">
-          <input
-            type="number"
-            placeholder="Enter amount e.g. 100"
-            value={rechargeAmount}
-            onChange={(e) => setRechargeAmount(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white w-full focus:outline-none focus:border-amber-500"
-          />
-          <button
-            onClick={handleRecharge}
-            className="bg-amber-500 hover:bg-amber-600 text-black font-bold px-6 py-3 rounded-xl transition text-sm whitespace-nowrap"
-          >
-            Recharge Now
-          </button>
-        </div>
-      </div>
-
       {/* TRADING SIGNAL OVERVIEW */}
       <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex justify-between items-center text-sm">
         <div>
@@ -316,7 +267,7 @@ function Trade() {
         </div>
         <div>
           <span className="text-gray-400">Yield Rate: </span>
-          <span className="font-bold text-emerald-400 ml-1">+{signal?.profit_percentage || 3.5}%</span>
+          <span className="font-bold text-emerald-400 ml-1">+{signal?.profit_percentage || 2.0}%</span>
         </div>
       </div>
 
