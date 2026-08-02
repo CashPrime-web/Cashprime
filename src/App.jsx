@@ -289,7 +289,7 @@ function App() {
                       </div>
                     </div>
 
-                    {/* SNELMENU KNOFFEN (WERKBAAR GEMAAKT) */}
+                    {/* SNELMENU KNOFFEN DIRECT GEKOPPELD NAAR EXACT DIEZELFDE PAGES */}
                     <div className="grid grid-cols-4 gap-2 pt-4 border-t border-white/15 text-center">
                       <Link
                         to="/withdraw"

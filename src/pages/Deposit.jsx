@@ -1,507 +1,120 @@
-import QRCode from "react-qr-code";
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 
-function Deposit() {
-
+export default function Deposit() {
   const [coin, setCoin] = useState("USDT");
   const [network, setNetwork] = useState("TRC20");
   const [amount, setAmount] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
-  const [history, setHistory] = useState([]);
-
-
-
-  const deposits = {
-
-    USDT: {
-      TRC20: "TJhEwTziQLTo834C3CBbHpiVEb5RSCYJNC",
-      ERC20: "0xb92Fa3CBE7F96a4a212196C1a6D0163c1157ac07",
-    },
-
-    BTC: {
-      BTC: "12vr23LBGzPopmkeHngLhEJmgArV91wxi8"
-    },
-
-    ETH: {
-      ERC20: "0xb92Fa3CBE7F96a4a212196C1a6D0163c1157ac07"
-    }
-
+  // Voorbeeld adressen (pas aan naar jouw eigen wallets)
+  const walletAddresses = {
+    USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
+    BTC: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+    ETH: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
   };
 
+  const handleDeposit = async (e) => {
+    e.preventDefault();
+    if (!amount || amount <= 0) return;
 
+    setLoading(true);
+    setMessage("");
 
-  const fetchHistory = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
 
-
-    const { data:{ user } } = await supabase.auth.getUser();
-
-
-    if(!user){
+    if (!user) {
+      setMessage("User not authenticated.");
+      setLoading(false);
       return;
     }
 
-
-
-    const { data, error } = await supabase
-      .from("deposits")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending:false });
-
-
-
-    if(error){
-
-      console.log(error);
-      return;
-
-    }
-
-
-
-    setHistory(data || []);
-
-
-  };
-
-
-
-  useEffect(()=>{
-
-    fetchHistory();
-
-  },[]);
-
-
-
-
-  const submitDeposit = async () => {
-
-
-    const { data:{ user } } = await supabase.auth.getUser();
-
-
-
-    if(!user){
-
-      alert("Please login first");
-      return;
-
-    }
-
-
-
-    if(!amount || Number(amount) <= 0){
-
-      alert("Enter a valid amount");
-      return;
-
-    }
-
-
-
-    const { error } = await supabase
-      .from("deposits")
-      .insert([{
-
+    const { error } = await supabase.from("deposits").insert([
+      {
         user_id: user.id,
-
-        amount: Number(amount),
-
         coin: coin,
-
         network: network,
-
+        amount: parseFloat(amount),
         status: "Pending"
+      }
+    ]);
 
-      }]);
+    setLoading(false);
 
-
-
-    if(error){
-
-      console.log(error);
-      alert(error.message);
-      return;
-
+    if (error) {
+      setMessage("Error submitting recharge: " + error.message);
+    } else {
+      setMessage("Recharge request submitted successfully! Pending admin approval.");
+      setAmount("");
     }
-
-
-
-    alert("Deposit request submitted");
-
-
-    setAmount("");
-
-
-    fetchHistory();
-
-
   };
-    return (
 
-    <div className="bg-gray-900 p-6 rounded-xl max-w-xl">
-
-
-      <h1 className="text-3xl font-bold mb-6">
-        Deposit Crypto
-      </h1>
-
-
-
-      <label className="text-gray-400 block mt-5">
-        Amount
-      </label>
-
-
-      <input
-
-      type="number"
-
-      className="bg-gray-800 p-3 rounded w-full mt-2"
-
-      placeholder="Enter amount"
-
-      value={amount}
-
-      onChange={(e)=>setAmount(e.target.value)}
-
-      />
-
-
-
-      <label className="text-gray-400 block mt-5">
-        Select Asset
-      </label>
-
-
-
-      <select
-
-      className="bg-gray-800 p-3 rounded w-full mt-2"
-
-      value={coin}
-
-      onChange={(e)=>{
-
-        setCoin(e.target.value);
-
-
-        if(e.target.value === "USDT"){
-          setNetwork("TRC20");
-        }
-
-        if(e.target.value === "BTC"){
-          setNetwork("BTC");
-        }
-
-        if(e.target.value === "ETH"){
-          setNetwork("ERC20");
-        }
-
-      }}
-
-      >
-
-
-      <option value="USDT">
-        USDT
-      </option>
-
-
-      <option value="BTC">
-        Bitcoin
-      </option>
-
-
-      <option value="ETH">
-        Ethereum
-      </option>
-
-
-      </select>
-
-
-
-
-      <label className="text-gray-400 block mt-5">
-        Select Network
-      </label>
-
-
-      <select
-
-      className="bg-gray-800 p-3 rounded w-full mt-2"
-
-      value={network}
-
-      onChange={(e)=>setNetwork(e.target.value)}
-
-      >
-
-
-      {Object.keys(deposits[coin]).map((net)=>(
-
-        <option key={net}>
-          {net}
-        </option>
-
-      ))}
-
-
-      </select>
-
-
-
-
-      <div className="mt-6">
-
-
-        <p className="text-gray-400">
-          Deposit Network
-        </p>
-
-
-        <h3 className="font-bold text-blue-400">
-          {network}
-        </h3>
-
-
-
-        <div className="flex justify-center mt-6">
-
-
-          <div className="bg-white p-4 rounded-xl">
-
-
-            <QRCode
-
-            value={deposits[coin][network]}
-
-            size={180}
-
-            />
-
-
+  return (
+    <div className="max-w-xl mx-auto bg-[#161d2a] border border-slate-800 p-6 rounded-2xl shadow-xl mt-6">
+      <h2 className="text-2xl font-bold mb-2">Recharge Account</h2>
+      <p className="text-slate-400 text-xs mb-6">Select your preferred cryptocurrency and deposit funds to your account.</p>
+
+      {message && (
+        <div className={`p-3 rounded-xl text-sm mb-4 border ${message.includes("Error") ? "bg-rose-500/10 border-rose-500/20 text-rose-400" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"}`}>
+          {message}
+        </div>
+      )}
+
+      <form onSubmit={handleDeposit} className="space-y-4">
+        <div>
+          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">Select Asset</label>
+          <select
+            value={coin}
+            onChange={(e) => setCoin(e.target.value)}
+            className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-500 text-white"
+          >
+            <option value="USDT">USDT (Tether)</option>
+            <option value="BTC">BTC (Bitcoin)</option>
+            <option value="ETH">ETH (Ethereum)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">Network</label>
+          <select
+            value={network}
+            onChange={(e) => setNetwork(e.target.value)}
+            className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-500 text-white"
+          >
+            <option value="TRC20">TRC20 (Tron Network)</option>
+            <option value="ERC20">ERC20 (Ethereum Network)</option>
+            <option value="BEP20">BEP20 (BNB Smart Chain)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">Deposit Address</label>
+          <div className="bg-[#0b0e14] border border-slate-800 rounded-xl p-3 text-xs font-mono text-amber-400 break-all select-all flex justify-between items-center">
+            <span>{walletAddresses[coin] || walletAddresses.USDT}</span>
           </div>
-
-
         </div>
 
-
-
-
-        <p className="text-gray-400 mt-4">
-          Deposit Address
-        </p>
-
-
-        <div className="bg-gray-800 p-4 rounded break-all mt-2">
-
-          {deposits[coin][network]}
-
+        <div>
+          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">Amount ($)</label>
+          <input
+            type="number"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-500 text-white"
+            required
+          />
         </div>
-
-
 
         <button
-
-        className="mt-4 bg-blue-500 px-5 py-3 rounded"
-
-        onClick={()=>navigator.clipboard.writeText(
-          deposits[coin][network]
-        )}
-
+          type="submit"
+          disabled={loading}
+          className="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold py-3.5 rounded-xl transition mt-4 disabled:opacity-50"
         >
-
-        Copy Address
-
+          {loading ? "Processing..." : "Confirm Recharge"}
         </button>
-
-
-      </div>
-
-
-
-
-
-      <button
-
-      onClick={submitDeposit}
-
-      className="mt-6 bg-green-500 px-6 py-3 rounded font-bold"
-
-      >
-
-      I Have Deposited
-
-      </button>
-
-
-
-
-
-      <div className="mt-8">
-
-
-        <h2 className="text-xl font-bold mb-4">
-          Deposit History
-        </h2>
-
-
-
-        <div className="bg-gray-800 rounded-xl p-6">
-
-
-          <div className="overflow-x-auto">
-
-
-            <table className="w-full text-left">
-
-
-              <thead className="text-gray-400 border-b border-gray-700">
-
-                <tr>
-
-                  <th className="p-3">
-                    Date
-                  </th>
-
-                  <th className="p-3">
-                    Asset
-                  </th>
-
-                  <th className="p-3">
-                    Network
-                  </th>
-
-                  <th className="p-3">
-                    Amount
-                  </th>
-
-                  <th className="p-3">
-                    Status
-                  </th>
-
-                </tr>
-
-              </thead>
-
-
-
-
-              <tbody>
-
-
-              {history.length === 0 ? (
-
-                <tr>
-
-                  <td className="p-3 text-gray-400">
-                    No deposits yet
-                  </td>
-
-                </tr>
-
-
-              ) : (
-
-
-                history.map((deposit)=>(
-
-
-                  <tr
-                  key={deposit.id}
-                  className="border-b border-gray-800"
-                  >
-
-
-                    <td className="p-3 text-gray-400">
-
-                      {new Date(
-                        deposit.created_at
-                      ).toLocaleDateString()}
-
-                    </td>
-
-
-
-                    <td className="p-3">
-
-                      {deposit.coin}
-
-                    </td>
-
-
-
-                    <td className="p-3">
-
-                      {deposit.network}
-
-                    </td>
-
-
-
-                    <td className="p-3">
-
-                      {deposit.amount}
-
-                    </td>
-
-
-
-                    <td
-
-                    className={
-                      deposit.status === "Approved"
-                      ? "p-3 text-green-400"
-                      :
-                      deposit.status === "Rejected"
-                      ? "p-3 text-red-400"
-                      :
-                      "p-3 text-yellow-400"
-                    }
-
-                    >
-
-                      {deposit.status}
-
-                    </td>
-
-
-
-                  </tr>
-
-
-                ))
-
-
-              )}
-
-
-
-              </tbody>
-
-
-            </table>
-
-
-          </div>
-
-
-        </div>
-
-
-      </div>
-
-
-
+      </form>
     </div>
-
   );
-
 }
-
-
-export default Deposit;
