@@ -316,6 +316,7 @@ console.log("MY VERIFICATIONS DETAIL:", JSON.stringify(verificationWithUsers, nu
 
   };
     const approveWithdrawal = async(withdrawal)=>{
+      console.log("NEW APPROVE CODE LOADED");
         console.log("CLICKED WITHDRAWAL:", withdrawal);
 
     const user = users.find(
@@ -355,17 +356,42 @@ console.log("MY VERIFICATIONS DETAIL:", JSON.stringify(verificationWithUsers, nu
       return;
 
     }
+const {data:test,error:testError}= await supabase
+.from("withdrawals")
+.select("*")
+.eq("id", withdrawal.id);
 
-    const {data, error}= await supabase
+console.log("CHECK BEFORE UPDATE:", test, testError);
+    const { error } = await supabase
   .from("withdrawals")
   .update({
-    status:"Approved"
+    status: "Approved"
   })
-  .eq("id", withdrawal.id)
-  .select();
+  .eq("id", withdrawal.id);
 
-console.log("APPROVE WITHDRAWAL RESULT:", data, error);
-    if(error){
+console.log("FINAL UPDATE:", {
+  id: withdrawal.id,
+  error
+});
+
+if(error){
+  alert(error.message);
+  return;
+}
+
+alert("Withdrawal approved");
+fetchData();
+
+console.log("FULL WITHDRAWAL UPDATE:", {
+  id: withdrawal.id,
+  data,
+  error
+});
+console.log("ID DIE IK UPDATE:", withdrawal.id);
+console.log("UPDATE DATA:", data);
+console.log("UPDATE ERROR:", error);
+
+console.log("NIEUWE CODE BEREIKT");    if(error){
 
       alert(error.message);
       return;
@@ -706,11 +732,14 @@ Reject
               <>
 
               <button
-              onClick={()=>approveWithdrawal(withdrawal)}
-              className="bg-green-500 px-3 py-2 rounded mr-2"
-              >
-                Approve
-              </button>
+onClick={()=>{
+  console.log("APPROVE BUTTON CLICKED");
+  approveWithdrawal(withdrawal);
+}}
+className="bg-green-500 px-3 py-2 rounded mr-2"
+>
+Approve
+</button>
 
 
               <button
