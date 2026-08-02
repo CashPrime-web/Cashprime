@@ -53,12 +53,13 @@ function Layout({ children }) {
         `}
       >
         <div>
-          {/* --- PLAATS DIT IN DE PLAATS DAARVAN --- */}
-<img 
-  src="/logo.png" 
-  alt="CashPrime Logo" 
-  className="w-10 h-10 object-contain rounded-xl shadow-lg shadow-amber-500/10 shrink-0" 
-/>
+          {/* Logo Sectie (Linksboven met logo.png) */}
+          <div className="flex items-center gap-3 mb-8">
+            <img 
+              src="/logo.png" 
+              alt="CashPrime Logo" 
+              className="w-10 h-10 object-contain rounded-xl shadow-lg shadow-amber-500/10 shrink-0" 
+            />
             <div>
               <h1 className="text-xl font-bold tracking-tight text-white leading-none">
                 Cash<span className="text-[#f5c453]">Prime</span>
@@ -253,7 +254,7 @@ function App() {
             }
           />
 
-          {/* DASHBOARD HOOFDPAGINA (Foto 1 & Foto 3 Gecombineerd) */}
+          {/* DASHBOARD HOOFDPAGINA */}
           <Route
             path="/"
             element={
@@ -273,9 +274,9 @@ function App() {
                   </div>
                 </div>
 
-                {/* --- SECTIE FOTO 3 (ASSET VALUATION & ACC BALANCE) --- */}
+                {/* --- SECTIE ASSET VALUATION & ACC BALANCE --- */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                  {/* Main Card (Asset Valuation - Foto 3) */}
+                  {/* Main Card */}
                   <div className="lg:col-span-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-xl shadow-blue-600/10 relative overflow-hidden flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-start mb-2">
@@ -291,7 +292,7 @@ function App() {
                         ${wallet?.balance !== undefined ? wallet.balance : "0.00"}
                       </div>
 
-                      {/* Omcirkelde Today's Earnings uit Foto 3 */}
+                      {/* Today's Earnings */}
                       <div className="inline-flex items-center gap-2 bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 px-3 py-1 rounded-lg text-xs font-semibold mb-6">
                         <span>Today's Earnings:</span>
                         <span className="font-bold">
@@ -300,7 +301,7 @@ function App() {
                       </div>
                     </div>
 
-                    {/* Snelmenu Knoppen uit Foto 3 */}
+                    {/* Snelmenu Knoppen */}
                     <div className="grid grid-cols-4 gap-2 pt-4 border-t border-white/15 text-center">
                       <Link
                         to="/withdraw"
@@ -344,7 +345,7 @@ function App() {
                     </div>
                   </div>
 
-                  {/* Sub-secties uit Foto 3 (My Account / Exchange & Trade) */}
+                  {/* Sub-secties (My Account / Exchange & Trade) */}
                   <div className="flex flex-col gap-4">
                     <div className="bg-[#161d2a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition">
                       <div>
@@ -376,7 +377,7 @@ function App() {
                   </div>
                 </div>
 
-                {/* --- MARKT OVERZICHT (Bestaande Component) --- */}
+                {/* --- MARKT OVERZICHT --- */}
                 <div className="mb-8">
                   <MarketOverview />
                 </div>
