@@ -14,10 +14,10 @@ import Wallet from "./pages/Wallet";
 import Withdraw from "./pages/Withdraw";
 import Deposit from "./pages/Deposit";
 import Trade from "./pages/Trade";
+import Exchange from "./pages/Exchange";
+import Transfer from "./pages/Transfer";
 import LogoutButton from "./components/LogoutButton";
 import MarketOverview from "./components/MarketOverview";
-
-console.log("APP LOADED");
 
 function Layout({ children }) {
   const location = useLocation();
@@ -33,7 +33,7 @@ function Layout({ children }) {
 
   return (
     <div className="min-h-screen bg-[#0b0e14] text-white flex flex-col md:flex-row overflow-x-hidden font-sans">
-      {/* --- SIDEBAR --- */}
+      {/* SIDEBAR */}
       <aside
         className={`
           fixed md:static
@@ -53,7 +53,7 @@ function Layout({ children }) {
         `}
       >
         <div>
-          {/* Logo Sectie (Linksboven met logo.png) */}
+          {/* Logo */}
           <div className="flex items-center gap-3 mb-8">
             <img 
               src="/logo.png" 
@@ -77,7 +77,7 @@ function Layout({ children }) {
             ✕
           </button>
 
-          {/* Navigatie Menu */}
+          {/* Navigation */}
           <nav className="flex flex-col space-y-2">
             <Link
               to="/"
@@ -150,7 +150,7 @@ function Layout({ children }) {
         </div>
       </aside>
 
-      {/* --- HOOFDINHOUD --- */}
+      {/* MAIN CONTENT */}
       <main className="flex-1 w-full min-w-0 p-4 md:p-8 bg-gradient-to-b from-[#0b0e14] to-[#111622]">
         <button
           onClick={() => setMenuOpen(true)}
@@ -171,36 +171,24 @@ function App() {
   const loadDashboard = async () => {
     const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-      return;
-    }
+    if (!user) return;
 
-    const { data: walletData, error: walletError } = await supabase
+    const { data: walletData } = await supabase
       .from("wallets")
       .select("*")
       .eq("user_id", user.id)
       .single();
 
-    if (walletError) {
-      console.log(walletError);
-    } else {
-      setWallet(walletData);
-    }
+    if (walletData) setWallet(walletData);
 
-    const { data: depositData, error: depositError } = await supabase
+    const { data: depositData } = await supabase
       .from("deposits")
       .select("*")
       .eq("user_id", user.id)
-      .order("created_at", {
-        ascending: false
-      })
+      .order("created_at", { ascending: false })
       .limit(5);
 
-    if (depositError) {
-      console.log(depositError);
-    } else {
-      setTransactions(depositData || []);
-    }
+    if (depositData) setTransactions(depositData);
   };
 
   useEffect(() => {
@@ -216,6 +204,8 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/wallet" element={<Wallet />} />
           <Route path="/trade" element={<Trade />} />
+          <Route path="/exchange" element={<Exchange />} />
+          <Route path="/transfer" element={<Transfer />} />
           <Route path="/verification" element={<Verification />} />
 
           <Route
@@ -274,9 +264,8 @@ function App() {
                   </div>
                 </div>
 
-                {/* --- SECTIE ASSET VALUATION & ACC BALANCE --- */}
+                {/* ASSET VALUATION */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                  {/* Main Card */}
                   <div className="lg:col-span-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-xl shadow-blue-600/10 relative overflow-hidden flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-start mb-2">
@@ -292,7 +281,6 @@ function App() {
                         ${wallet?.balance !== undefined ? wallet.balance : "0.00"}
                       </div>
 
-                      {/* Today's Earnings */}
                       <div className="inline-flex items-center gap-2 bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 px-3 py-1 rounded-lg text-xs font-semibold mb-6">
                         <span>Today's Earnings:</span>
                         <span className="font-bold">
@@ -301,7 +289,7 @@ function App() {
                       </div>
                     </div>
 
-                    {/* Snelmenu Knoppen */}
+                    {/* SNELMENU KNOFFEN (WERKBAAR GEMAAKT) */}
                     <div className="grid grid-cols-4 gap-2 pt-4 border-t border-white/15 text-center">
                       <Link
                         to="/withdraw"
@@ -324,7 +312,7 @@ function App() {
                       </Link>
 
                       <Link
-                        to="/transactions"
+                        to="/transfer"
                         className="flex flex-col items-center gap-1.5 hover:opacity-80 transition"
                       >
                         <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-lg">
@@ -334,7 +322,7 @@ function App() {
                       </Link>
 
                       <Link
-                        to="/trade"
+                        to="/exchange"
                         className="flex flex-col items-center gap-1.5 hover:opacity-80 transition"
                       >
                         <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-lg">
@@ -345,7 +333,6 @@ function App() {
                     </div>
                   </div>
 
-                  {/* Sub-secties (My Account / Exchange & Trade) */}
                   <div className="flex flex-col gap-4">
                     <div className="bg-[#161d2a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition">
                       <div>
@@ -377,35 +364,26 @@ function App() {
                   </div>
                 </div>
 
-                {/* --- MARKT OVERZICHT --- */}
                 <div className="mb-8">
                   <MarketOverview />
                 </div>
 
-                {/* --- RECENT TRANSACTIONS --- */}
                 <div className="bg-[#161d2a] border border-slate-800 p-6 rounded-2xl shadow-xl">
                   <h3 className="text-lg font-bold mb-4">Recent Transactions</h3>
-
                   {transactions.length === 0 && (
                     <p className="text-slate-400 text-sm">
                       No transactions available
                     </p>
                   )}
-
                   {transactions.map((tx) => (
                     <div
                       key={tx.id}
                       className="flex justify-between items-center border-b border-slate-800/80 py-3 last:border-0"
                     >
                       <div>
-                        <p className="font-semibold text-sm">
-                          Deposit {tx.coin}
-                        </p>
-                        <p className="text-slate-400 text-xs mt-0.5">
-                          {tx.network}
-                        </p>
+                        <p className="font-semibold text-sm">Deposit {tx.coin}</p>
+                        <p className="text-slate-400 text-xs mt-0.5">{tx.network}</p>
                       </div>
-
                       <div className="text-right">
                         <p className="font-bold text-sm">${tx.amount}</p>
                         <p
