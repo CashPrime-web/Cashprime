@@ -358,12 +358,12 @@ console.log("MY VERIFICATIONS DETAIL:", JSON.stringify(verificationWithUsers, nu
     const {data, error}= await supabase
   .from("withdrawals")
   .update({
-    status: "Approved"
+    status:"Approved"
   })
   .eq("id", withdrawal.id)
   .select();
 
-console.log("WITHDRAWAL UPDATE:", data, error);
+console.log("APPROVE WITHDRAWAL RESULT:", data, error);
     if(error){
 
       alert(error.message);
