@@ -86,8 +86,13 @@ function Admin() {
 
     setVerifications(verificationWithUsers);
 
-    // Haal trading signaal op
-    const { data: sigData } = await supabase.from("trading_signals").select("*").eq("is_active", true).maybeSingle();
+    // Haal trading signaal op (Zoekt op ID 1 of een actieve)
+    const { data: sigData } = await supabase
+      .from("trading_signals")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+
     if (sigData) {
       setSignalPair(sigData.pair);
       setSignalProfit(sigData.profit_percentage);
@@ -120,20 +125,25 @@ function Admin() {
     }
   };
 
-  // Signaal Updaten
+  // Signaal Updaten MET UPSERT (Garandeert dat het altijd opslaat)
   const handleUpdateSignal = async (e) => {
     e.preventDefault();
     setSignalMsg("");
 
     const { error } = await supabase
       .from("trading_signals")
-      .update({ pair: signalPair, profit_percentage: parseFloat(signalProfit) })
-      .eq("is_active", true);
+      .upsert({
+        id: 1,
+        pair: signalPair,
+        profit_percentage: parseFloat(signalProfit),
+        is_active: true,
+        updated_at: new Date()
+      });
 
     if (error) {
       setSignalMsg("Error updating signal: " + error.message);
     } else {
-      setSignalMsg("Trading signal updated successfully!");
+      setSignalMsg("✅ Signal successfully updated and saved!");
       fetchData();
     }
   };
