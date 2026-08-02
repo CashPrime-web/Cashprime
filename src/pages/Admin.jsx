@@ -316,6 +316,7 @@ console.log("MY VERIFICATIONS DETAIL:", JSON.stringify(verificationWithUsers, nu
 
   };
     const approveWithdrawal = async(withdrawal)=>{
+        console.log("CLICKED WITHDRAWAL:", withdrawal);
 
     const user = users.find(
       user=>user.id === withdrawal.user_id
