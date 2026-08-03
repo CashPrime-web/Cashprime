@@ -181,37 +181,29 @@ function App() {
       .eq("user_id", user.id)
       .single();
 
-    if (walletData) setWallet(walletData);
-
-    // 2. Haal actieve trades of werkelijke winst op uit de database indien aanwezig (geen hardcoded rommel)
-    const { data: tradesData } = await supabase
-      .from("user_trades")
-      .select("*")
-      .eq("user_id", user.id);
-
-    if (tradesData && tradesData.length > 0) {
-      // Tel alleen echte winst op als trades zijn voltooid/toegekend
-      const calculatedEarnings = tradesData.reduce((acc, t) => acc + Number(t.profit || 0), 0);
-      setTodaysEarnings(calculatedEarnings.toFixed(2));
-    } else {
-      setTodaysEarnings("0.00");
+    if (walletData) {
+      setWallet(walletData);
+      // Haal todays_earnings direct uit de wallet tabel (wordt al geüpdatet in Trade.jsx)
+      if (walletData.todays_earnings !== undefined) {
+        setTodaysEarnings(Number(walletData.todays_earnings).toFixed(2));
+      }
     }
 
-    // 3. Haal het actieve winstpercentage op uit de admin trading_signals tabel
+    // 2. Optioneel: Haal het actieve winstpercentage op uit de admin trading_signals tabel
     const { data: signalData } = await supabase
       .from("trading_signals")
       .select("*")
-      .order("updated_at", { ascending: false })
-      .limit(1);
+      .eq("id", 1)
+      .maybeSingle();
 
-    if (signalData && signalData.length > 0) {
-      const parsedPct = parseFloat(signalData[0].profit_percentage);
+    if (signalData) {
+      const parsedPct = parseFloat(signalData.profit_percentage);
       if (!isNaN(parsedPct)) {
         setSignalPercentage(parsedPct);
       }
     }
 
-    // 4. Haal recente transacties op voor deze gebruiker
+    // 3. Haal recente transacties op voor deze gebruiker
     const { data: depositData } = await supabase
       .from("deposits")
       .select("*")
@@ -221,7 +213,6 @@ function App() {
 
     if (depositData) setTransactions(depositData);
   };
-
   useEffect(() => {
     loadDashboard();
   }, []);
