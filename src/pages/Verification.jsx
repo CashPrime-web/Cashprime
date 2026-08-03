@@ -1,304 +1,151 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 
-function Verification() {
+export default function Verification() {
+  const [frontFile, setFrontFile] = useState(null);
+  const [backFile, setBackFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState(null);
+  const [message, setMessage] = useState("");
 
-  const [status, setStatus] = useState("Not Submitted");
-  useEffect(()=>{
+  useEffect(() => {
+    checkVerificationStatus();
+  }, []);
 
-  const loadVerification = async()=>{
-
-    const { data:{ user } } = await supabase.auth.getUser();
-
-
-    if(!user){
-      return;
-    }
-
+  const checkVerificationStatus = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
     const { data, error } = await supabase
-    .from("verifications")
-    .select("status")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending:false })
-    .limit(1)
-    .maybeSingle();
+      .from("verifications")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-
-    if(error){
-
-      console.log(error);
-      return;
-
+    if (data && data.length > 0) {
+      setStatus(data[0].status);
     }
-
-
-    if(data){
-
-      setStatus(data.status);
-
-    }
-
-
   };
 
-
-  loadVerification();
-
-
-},[]);
-  const [file, setFile] = useState(null);
-  const [loading, setLoading] = useState(false);
-
-  const [fullName, setFullName] = useState("");
-  const [dateOfBirth, setDateOfBirth] = useState("");
-
-
-
-  useEffect(()=>{
-
-    checkVerification();
-
-  },[]);
-
-
-
-  const checkVerification = async()=>{
-
-    const {data:{user}} = await supabase.auth.getUser();
-    console.log("CURRENT USER:", user);
-
-    if(!user) return;
-
-
-    const {data,error}= await supabase
-    .from("verifications")
-    .select("*")
-    .eq("user_id", user.id)
-    .single();
-
-
-    if(data){
-
-      setStatus(data.status);
-
-    }
-
-  };
-
-
-
-
-
-  const submitVerification = async()=>{
-
-    if(!file){
-
-      alert("Please upload your ID document");
+  const handleUpload = async (e) => {
+    e.preventDefault();
+    if (!frontFile || !backFile) {
+      setMessage("Please upload both the front and back of your ID.");
       return;
-
     }
-
 
     setLoading(true);
+    setMessage("");
 
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
 
-    const {data:{user}} = await supabase.auth.getUser();
+      // 1. Upload voorkant naar Supabase Storage (zorg dat je een bucket hebt genaamd 'kyc-documents')
+      const frontFileName = `${user.id}/front_${Date.now()}`;
+      const { error: frontError } = await supabase.storage
+        .from("kyc-documents")
+        .upload(frontFileName, frontFile);
 
+      if (frontError) throw frontError;
 
-    if(!user){
+      const { data: frontPublicUrl } = supabase.storage
+        .from("kyc-documents")
+        .getPublicUrl(frontFileName);
 
-      alert("User not logged in");
+      // 2. Upload achterkant naar Supabase Storage
+      const backFileName = `${user.id}/back_${Date.now()}`;
+      const { error: backError } = await supabase.storage
+        .from("kyc-documents")
+        .upload(backFileName, backFile);
+
+      if (backError) throw backError;
+
+      const { data: backPublicUrl } = supabase.storage
+        .from("kyc-documents")
+        .getPublicUrl(backFileName);
+
+      // 3. Opslaan in de 'verifications' tabel
+      const { error: dbError } = await supabase
+        .from("verifications")
+        .insert([
+          {
+            user_id: user.id,
+            front_url: frontPublicUrl.publicUrl,
+            back_url: backPublicUrl.publicUrl,
+            status: "Pending",
+          }
+        ]);
+
+      if (dbError) throw dbError;
+
+      setStatus("Pending");
+      setMessage("ID documents submitted successfully! Awaiting admin review.");
+    } catch (err) {
+      console.error(err);
+      setMessage("Error uploading documents: " + err.message);
+    } finally {
       setLoading(false);
-      return;
-
     }
-
-
-
-    const fileName =
-    `${user.id}-${Date.now()}-${file.name}`;
-
-
-
-    const {error:uploadError}= await supabase
-    .storage
-    .from("verification-documents")
-    .upload(fileName,file);
-
-
-
-    if(uploadError){
-
-      alert(uploadError.message);
-      setLoading(false);
-      return;
-
-    }
-
-
-
-
-
-    const {data:urlData}= supabase
-    .storage
-    .from("verification-documents")
-    .getPublicUrl(fileName);
-
-
-
-    const documentUrl = urlData.publicUrl;
-
-
-
-
-    const {data,error}= await supabase
-.from("verifications")
-.insert({
-  user_id:user.id,
-  document_url:documentUrl,
-  status:"Pending"
-})
-.select();
-
-console.log("INSERT RESULT:", data, error);
-
-
-
-    if(error){
-
-      alert(error.message);
-      setLoading(false);
-      return;
-
-    }
-
-
-
-    setStatus("Pending");
-
-    alert("Verification submitted");
-
-
-    setLoading(false);
-
   };
 
-
-
-
-
   return (
+    <div className="max-w-2xl mx-auto bg-[#161d2a] border border-slate-800 p-8 rounded-2xl shadow-xl text-white">
+      <h2 className="text-2xl font-bold mb-2">ID Verification</h2>
+      <p className="text-slate-400 text-sm mb-6">
+        Please upload clear pictures of the front and back of your official identification document.
+      </p>
 
-    <div className="bg-gray-900 p-6 rounded-xl max-w-xl">
+      {status === "Approved" ? (
+        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl text-center font-semibold">
+          Your account is fully verified! 🎉
+        </div>
+      ) : status === "Pending" ? (
+        <div className="bg-amber-500/10 border border-amber-500/30 text-amber-400 p-4 rounded-xl text-center font-semibold">
+          Your documents are currently under review by our admin team. Please check back later.
+        </div>
+      ) : (
+        <form onSubmit={handleUpload} className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Front of ID Document
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setFrontFile(e.target.files[0])}
+              className="w-full text-sm text-slate-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer bg-[#0b0e14] border border-slate-800 rounded-xl p-2"
+            />
+          </div>
 
-      <h1 className="text-3xl font-bold mb-6">
-        ID Verification
-      </h1>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Back of ID Document
+            </label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setBackFile(e.target.files[0])}
+              className="w-full text-sm text-slate-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer bg-[#0b0e14] border border-slate-800 rounded-xl p-2"
+            />
+          </div>
 
+          {message && (
+            <p className={`text-sm ${status === "Pending" ? "text-emerald-400" : "text-red-400"}`}>
+              {message}
+            </p>
+          )}
 
-
-      <div className="bg-gray-800 p-4 rounded-xl mb-6">
-
-        <p className="text-gray-400">
-          Verification Status
-        </p>
-
-        <h3
-className={
-  status === "Approved"
-    ? "text-green-400 font-bold mt-2"
-    :
-  status === "Rejected"
-    ? "text-red-400 font-bold mt-2"
-    :
-    "text-yellow-400 font-bold mt-2"
-}
->
-  {status}
-        </h3>
-
-      </div>
-
-
-
-      <label className="text-gray-400">
-        Full Name
-      </label>
-
-      <input
-
-        value={fullName}
-
-        onChange={(e)=>setFullName(e.target.value)}
-
-        className="bg-gray-800 p-3 rounded w-full mt-2"
-
-        placeholder="Enter your full name"
-
-      />
-
-
-
-      <label className="text-gray-400 block mt-5">
-        Date of Birth
-      </label>
-
-
-      <input
-
-        value={dateOfBirth}
-
-        onChange={(e)=>setDateOfBirth(e.target.value)}
-
-        type="date"
-
-        className="bg-gray-800 p-3 rounded w-full mt-2"
-
-      />
-
-
-
-
-      <label className="text-gray-400 block mt-5">
-        Upload ID Document
-      </label>
-
-
-      <input
-
-        type="file"
-
-        onChange={(e)=>setFile(e.target.files[0])}
-
-        className="mt-2"
-
-      />
-
-
-
-
-      <button
-
-        disabled={loading}
-
-        onClick={submitVerification}
-
-        className="mt-6 bg-blue-500 px-6 py-3 rounded w-full"
-
-      >
-
-        {loading ? "Submitting..." : "Submit Verification"}
-
-      </button>
-
-
-
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 font-bold rounded-xl shadow-lg shadow-blue-600/20 transition disabled:opacity-50"
+          >
+            {loading ? "Uploading Documents..." : "Submit for Verification"}
+          </button>
+        </form>
+      )}
     </div>
-
   );
-
 }
-
-
-export default Verification;

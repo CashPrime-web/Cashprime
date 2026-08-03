@@ -125,7 +125,7 @@ function Admin() {
     }
   };
 
-  // Signaal Updaten MET UPSERT (Slaat jouw gekozen percentage direct op in de database!)
+  // Signaal Updaten MET UPSERT
   const handleUpdateSignal = async (e) => {
     e.preventDefault();
     setSignalMsg("");
@@ -475,7 +475,7 @@ function Admin() {
         </div>
       </div>
 
-      {/* VERIFICATION REQUESTS */}
+      {/* VERIFICATION REQUESTS (FRONT & BACK ID) */}
       <div className="bg-gray-900 p-6 rounded-xl">
         <h2 className="text-xl font-bold mb-4">ID Verification Requests</h2>
         <div className="overflow-x-auto w-full">
@@ -484,7 +484,7 @@ function Admin() {
               <tr>
                 <th className="p-3">Name</th>
                 <th className="p-3">Email</th>
-                <th className="p-3">Document</th>
+                <th className="p-3">Documents (Front & Back)</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Action</th>
               </tr>
@@ -495,18 +495,37 @@ function Admin() {
                   <td className="p-3">{verification.profile?.name}</td>
                   <td className="p-3">{verification.profile?.email}</td>
                   <td className="p-3">
-                    <a href={verification.document_url} target="_blank" rel="noreferrer" className="text-blue-400 underline">
-                      View Document
-                    </a>
+                    <div className="flex gap-2">
+                      <a 
+                        href={verification.front_url} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="text-xs bg-blue-600/20 text-blue-400 border border-blue-600/30 px-2.5 py-1.5 rounded hover:bg-blue-600/30 transition"
+                      >
+                        Front ID ↗
+                      </a>
+                      <a 
+                        href={verification.back_url} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="text-xs bg-blue-600/20 text-blue-400 border border-blue-600/30 px-2.5 py-1.5 rounded hover:bg-blue-600/30 transition"
+                      >
+                        Back ID ↗
+                      </a>
+                    </div>
                   </td>
-                  <td className="p-3">{verification.status}</td>
+                  <td className="p-3">
+                    <span className={verification.status === "Approved" ? "text-green-400 font-bold" : verification.status === "Rejected" ? "text-red-400 font-bold" : "text-amber-400 font-bold"}>
+                      {verification.status}
+                    </span>
+                  </td>
                   <td className="p-3">
                     {verification.status === "Pending" && (
                       <>
-                        <button onClick={() => approveVerification(verification.id)} className="bg-green-500 px-3 py-2 rounded mr-2">
+                        <button onClick={() => approveVerification(verification.id)} className="bg-green-500 hover:bg-green-600 text-white text-xs px-3 py-2 rounded mr-2 font-bold transition">
                           Approve
                         </button>
-                        <button onClick={() => rejectVerification(verification.id)} className="bg-red-500 px-3 py-2 rounded">
+                        <button onClick={() => rejectVerification(verification.id)} className="bg-red-500 hover:bg-red-600 text-white text-xs px-3 py-2 rounded font-bold transition">
                           Reject
                         </button>
                       </>
