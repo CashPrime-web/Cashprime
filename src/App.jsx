@@ -167,13 +167,14 @@ function Layout({ children }) {
 function App() {
   const [wallet, setWallet] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [signalPercentage, setSignalPercentage] = useState(2); // Standaard op 2%
+  const [todaysEarnings, setTodaysEarnings] = useState("0.00");
+  const [signalPercentage, setSignalPercentage] = useState(2);
 
   const loadDashboard = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1. Haal wallet gegevens op (ondersteunt zowel balance, exchange_balance als trade_balance)
+    // 1. Haal wallet gegevens op voor deze specifieke gebruiker
     const { data: walletData } = await supabase
       .from("wallets")
       .select("*")
@@ -182,7 +183,21 @@ function App() {
 
     if (walletData) setWallet(walletData);
 
-    // 2. Haal het actieve winstpercentage op uit de admin trading_signals tabel
+    // 2. Haal actieve trades of werkelijke winst op uit de database indien aanwezig (geen hardcoded rommel)
+    const { data: tradesData } = await supabase
+      .from("user_trades")
+      .select("*")
+      .eq("user_id", user.id);
+
+    if (tradesData && tradesData.length > 0) {
+      // Tel alleen echte winst op als trades zijn voltooid/toegekend
+      const calculatedEarnings = tradesData.reduce((acc, t) => acc + Number(t.profit || 0), 0);
+      setTodaysEarnings(calculatedEarnings.toFixed(2));
+    } else {
+      setTodaysEarnings("0.00");
+    }
+
+    // 3. Haal het actieve winstpercentage op uit de admin trading_signals tabel
     const { data: signalData } = await supabase
       .from("trading_signals")
       .select("*")
@@ -196,7 +211,7 @@ function App() {
       }
     }
 
-    // 3. Haal recente transacties op
+    // 4. Haal recente transacties op voor deze gebruiker
     const { data: depositData } = await supabase
       .from("deposits")
       .select("*")
@@ -211,10 +226,8 @@ function App() {
     loadDashboard();
   }, []);
 
-  // Veilige berekeningen op basis van echte data
   const tradeBalance = Number(wallet?.balance || wallet?.trade_balance || 0);
   const exchangeBalance = Number(wallet?.exchange_balance || 0);
-  const todaysEarnings = (tradeBalance * (signalPercentage / 100)).toFixed(2);
 
   return (
     <BrowserRouter>
@@ -275,7 +288,7 @@ function App() {
                       <div className="inline-flex items-center gap-2 bg-emerald-400/20 text-emerald-300 border border-emerald-400/30 px-3 py-1 rounded-lg text-xs font-semibold mb-6">
                         <span>Today's Earnings:</span>
                         <span className="font-bold">
-                          ≈${todaysEarnings} ({signalPercentage}%)
+                          +${todaysEarnings}
                         </span>
                       </div>
                     </div>
