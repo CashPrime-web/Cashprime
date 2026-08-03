@@ -71,15 +71,15 @@ export default function Transfer() {
       return;
     }
 
+    // Bereken de nieuwe trading balance direct op basis van de actuele waarden
     let newTrading = tradingBalance;
-
     if (fromAccount === "Exchange" && toAccount === "Trade") {
-      newTrading += transferAmount; // Geld gaat van exchange naar trade
+      newTrading += transferAmount; // Geld naar trade
     } else if (fromAccount === "Trade" && toAccount === "Exchange") {
-      newTrading -= transferAmount; // Geld gaat terug naar exchange
+      newTrading -= transferAmount; // Geld terug naar exchange
     }
 
-    // We updaten de trading_balance. De hoofdbalk (balance / asset valuation) blijft onaangetast ($475).
+    // STUUR DIT DIRECT NAAR SUPABASE (We updaten ALLEEN trading_balance, totale balance blijft 475)
     const { error } = await supabase
       .from("wallets")
       .update({
@@ -94,7 +94,7 @@ export default function Transfer() {
     } else {
       setMessage(`✅ Successfully transferred $${transferAmount.toFixed(2)} from ${fromAccount} to ${toAccount}!`);
       setAmount("");
-      fetchBalances();
+      fetchBalances(); // Herlaad de balansen direct op het scherm
     }
   };
 

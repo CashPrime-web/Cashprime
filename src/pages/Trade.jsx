@@ -46,6 +46,8 @@ function Trade() {
       .eq("user_id", user.id)
       .maybeSingle();
     
+    console.log("WAT ZIT ER IN WALLETDATA:", walletData);
+
     if (walletData) {
       setWallet(walletData);
     }
@@ -89,31 +91,35 @@ function Trade() {
   useEffect(() => {
     fetchAppData();
     
-    // Optioneel: luister naar realtime wijzigingen in de wallets tabel zodat de Trade-pagina direct update als je getransferd hebt!
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    // Realtime listener met correcte async constructie
+    const setupRealtime = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    const channel = supabase
-      .channel("wallet-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "wallets",
-          filter: `user_id=eq.${user.id}`,
-        },
-        (payload) => {
-          if (payload.new) {
-            setWallet(payload.new);
+      const channel = supabase
+        .channel("wallet-changes")
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "wallets",
+            filter: `user_id=eq.${user.id}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              setWallet(payload.new);
+            }
           }
-        }
-      )
-      .subscribe();
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
+      return () => {
+        supabase.removeChannel(channel);
+      };
     };
+
+    setupRealtime();
   }, []);
 
   const isTradeUnlocked = (tradeNum) => {
@@ -130,7 +136,7 @@ function Trade() {
     return now >= unlockTime && now <= endTime;
   };
 
-  // UITVOEREN VAN TRADE (Berekent winst over de trading balance en telt op bij Total Balance & Earnings)
+  // UITVOEREN VAN TRADE
   const handleExecuteTrade = async (tradeNum) => {
     setLoading(true);
 
@@ -144,7 +150,7 @@ function Trade() {
 
     const activeProfitPct = signal ? parseFloat(signal.profit_percentage) : 2.0; 
     const currentTradingBalance = Number(wallet.trading_balance || 0);
-    const currentTotalBalance = Number(wallet.balance || 0); // Asset Valuation (bijv. 475)
+    const currentTotalBalance = Number(wallet.balance || 0);
 
     if (currentTradingBalance <= 0) {
       alert("⚠️ Your trading balance is $0.00. Please transfer funds to your trading account first.");
@@ -152,15 +158,12 @@ function Trade() {
       return;
     }
 
-    // 1. Winstberekening over de actuele trading balance (bijv. 2% over $400 = $8.00)
     const profitAmount = currentTradingBalance * (activeProfitPct / 100);
     
-    // 2. Nieuwe waardes berekenen
     const newTradingBalance = currentTradingBalance + profitAmount;
-    const newTotalBalance = currentTotalBalance + profitAmount; // 475 + 8 = 483
+    const newTotalBalance = currentTotalBalance + profitAmount;
     const newTodaysEarnings = Number(wallet.todays_earnings || 0) + profitAmount;
 
-    // 3. Opslaan in user_trades logboek
     const { error: tradeErr } = await supabase.from("user_trades").insert([
       {
         user_id: user.id,
@@ -178,7 +181,6 @@ function Trade() {
       return;
     }
 
-    // 4. Wallet bijwerken in Supabase
     const { error: walletErr } = await supabase
       .from("wallets")
       .update({
