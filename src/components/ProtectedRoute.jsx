@@ -30,15 +30,18 @@ function ProtectedRoute({ children }) {
         return;
       }
 
-      // Als de gebruiker admin is, altijd toelaten (optioneel handig)
+      // Als de gebruiker admin is, altijd toelaten
       if (profile.role === "admin") {
         setAuthorized(true);
         setLoading(false);
         return;
       }
 
+      // Maak de status altijd lowercase zodat hoofdletters geen probleem vormen
+      const userStatus = (profile.status || "").toLowerCase();
+
       // Controleer de status van de klant
-      if (profile.status === "blocked") {
+      if (userStatus === "blocked") {
         await supabase.auth.signOut();
         setMessage("Jouw account is geblokkeerd door de beheerder.");
         setAuthorized(false);
@@ -46,7 +49,7 @@ function ProtectedRoute({ children }) {
         return;
       }
 
-      if (profile.status === "pending") {
+      if (userStatus === "pending") {
         await supabase.auth.signOut();
         setMessage("Jouw account is nog in afwachting van goedkeuring (pending).");
         setAuthorized(false);

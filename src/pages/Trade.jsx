@@ -45,13 +45,19 @@ function Trade() {
       setWallet(walletData);
     }
 
-    // 3. Haal signaal
+    // 3. Haal signaal EN controleer of het actief is (is_active)
     const { data: sigData } = await supabase
       .from("trading_signals")
       .select("*")
       .eq("id", 1)
       .maybeSingle();
-    setSignal(sigData);
+    
+    // Als is_active false is of niet bestaat, zetten we signal op null zodat het verborgen wordt
+    if (sigData && sigData.is_active === true) {
+      setSignal(sigData);
+    } else {
+      setSignal(null);
+    }
 
     // 4. Haal trades van vandaag
     const today = new Date().toISOString().split("T")[0];
@@ -94,6 +100,11 @@ function Trade() {
   };
 
   const handleExecuteTrade = async (tradeNum) => {
+    if (!signal || !signal.is_active) {
+      alert("⚠️ Trading signals are currently turned off by the administrator.");
+      return;
+    }
+
     setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -102,9 +113,8 @@ function Trade() {
       return;
     }
 
-    const activeProfitPct = signal ? parseFloat(signal.profit_percentage) : 2.0; 
+    const activeProfitPct = parseFloat(signal.profit_percentage) || 2.0; 
     
-    // Gebruik 'bonus' als het Trade-saldo om te matchen met Transfer.jsx
     const currentTradingBalance = Number(wallet.bonus || 0);
     const currentTotalBalance = Number(wallet.balance || 0);
 
@@ -136,7 +146,6 @@ function Trade() {
       return;
     }
 
-    // Update zowel de totale balans als de bonus (trade-saldo) en de winst
     const updatePayload = {
       balance: parseFloat(newTotalBalance.toFixed(2)),
       bonus: parseFloat(newTradingBalance.toFixed(2)),
@@ -161,7 +170,6 @@ function Trade() {
   const maxTrades = userProfile?.max_daily_trades || 2;
   const availableTradeNumbers = Array.from({ length: maxTrades }, (_, i) => i + 1);
 
-  // Bereken de exchange balans op dezelfde manier als in Transfer.jsx
   const totalValuation = Number(wallet?.balance || 0);
   const tradingBal = Number(wallet?.bonus || 0);
   const exchangeBal = Math.max(0, totalValuation - tradingBal);
@@ -214,59 +222,72 @@ function Trade() {
         </div>
       </div>
 
-      <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex justify-between items-center text-sm">
-        <div>
-          <span className="text-gray-400">Active Pair: </span>
-          <span className="font-bold text-amber-400 ml-1">{signal?.pair || "BTC/USDT"}</span>
+      {/* ACTIEF SIGNAAL OF MELDING DAT HET UIT STAAT */}
+      {signal ? (
+        <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex justify-between items-center text-sm">
+          <div>
+            <span className="text-gray-400">Active Pair: </span>
+            <span className="font-bold text-amber-400 ml-1">{signal.pair}</span>
+          </div>
+          <div>
+            <span className="text-gray-400">Yield Rate: </span>
+            <span className="font-bold text-emerald-400 ml-1">+{signal.profit_percentage}%</span>
+          </div>
         </div>
-        <div>
-          <span className="text-gray-400">Yield Rate: </span>
-          <span className="font-bold text-emerald-400 ml-1">+{signal?.profit_percentage || 2.0}%</span>
+      ) : (
+        <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-xl text-center text-red-400 text-sm">
+          🔒 Trading signals are currently closed/offline by administration. Please check back later.
         </div>
-      </div>
+      )}
 
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-white">Daily Trading Sessions ({maxTrades} Allowed)</h2>
 
-        {availableTradeNumbers.map((num) => {
-          const isDone = completedTrades.includes(num);
-          const unlocked = isTradeUnlocked(num);
-          const timeInfo = scheduleTimes[num];
+        {signal ? (
+          availableTradeNumbers.map((num) => {
+            const isDone = completedTrades.includes(num);
+            const unlocked = isTradeUnlocked(num);
+            const timeInfo = scheduleTimes[num];
 
-          return (
-            <div key={num} className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-base text-white">Trade #{num}</h3>
-                <p className="text-xs text-gray-400 mt-1">
-                  Scheduled: <span className="text-gray-200">{timeInfo?.label || "Anytime"}</span>
-                </p>
-              </div>
+            return (
+              <div key={num} className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-base text-white">Trade #{num}</h3>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Scheduled: <span className="text-gray-200">{timeInfo?.label || "Anytime"}</span>
+                  </p>
+                </div>
 
-              <div>
-                {isDone ? (
-                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs px-4 py-2 rounded-lg font-bold">
-                    ✓ Completed
-                  </span>
-                ) : unlocked ? (
-                  <button
-                    disabled={loading}
-                    onClick={() => handleExecuteTrade(num)}
-                    className="bg-amber-500 hover:bg-amber-600 text-black font-bold px-5 py-2.5 rounded-lg transition text-sm disabled:opacity-50"
-                  >
-                    {loading ? "Processing..." : `Execute Trade #${num}`}
-                  </button>
-                ) : (
-                  <button
-                    disabled
-                    className="bg-gray-800 text-gray-500 cursor-not-allowed font-medium px-4 py-2 rounded-lg text-xs border border-gray-700"
-                  >
-                    🔒 Locked
-                  </button>
-                )}
+                <div>
+                  {isDone ? (
+                    <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-xs px-4 py-2 rounded-lg font-bold">
+                      ✓ Completed
+                    </span>
+                  ) : unlocked ? (
+                    <button
+                      disabled={loading}
+                      onClick={() => handleExecuteTrade(num)}
+                      className="bg-amber-500 hover:bg-amber-600 text-black font-bold px-5 py-2.5 rounded-lg transition text-sm disabled:opacity-50"
+                    >
+                      {loading ? "Processing..." : `Execute Trade #${num}`}
+                    </button>
+                  ) : (
+                    <button
+                      disabled
+                      className="bg-gray-800 text-gray-500 cursor-not-allowed font-medium px-4 py-2 rounded-lg text-xs border border-gray-700"
+                    >
+                      🔒 Locked
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        ) : (
+          <div className="bg-gray-900/40 border border-gray-800 text-gray-500 p-6 rounded-xl text-center text-xs">
+            No trades available right now.
+          </div>
+        )}
       </div>
     </div>
   );

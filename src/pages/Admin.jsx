@@ -11,6 +11,7 @@ function Admin() {
 
   const [signalPair, setSignalPair] = useState("BTC/USDT");
   const [signalProfit, setSignalProfit] = useState(3.5);
+  const [signalIsActive, setSignalIsActive] = useState(true);
   const [signalMsg, setSignalMsg] = useState("");
   const [tradesToday, setTradesToday] = useState([]);
 
@@ -28,11 +29,37 @@ function Admin() {
 
     setUsers(combined);
 
+    // Haal deposits op inclusief gebruikersprofiel
     const { data: depositData } = await supabase.from("deposits").select("*").order("created_at", { ascending: false });
-    if (depositData) setDeposits(depositData);
+    if (depositData) {
+      const depositsWithUsers = await Promise.all(
+        depositData.map(async (deposit) => {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("name, email, referred_by")
+            .eq("id", deposit.user_id)
+            .maybeSingle();
+          return { ...deposit, profile };
+        })
+      );
+      setDeposits(depositsWithUsers);
+    }
 
-    const { data: withdrawalData } = await supabase.from("withdrawals").select("*");
-    if (withdrawalData) setWithdrawals(withdrawalData);
+    // Haal withdrawals op inclusief gebruikersprofiel
+    const { data: withdrawalData } = await supabase.from("withdrawals").select("*").order("created_at", { ascending: false });
+    if (withdrawalData) {
+      const withdrawalsWithUsers = await Promise.all(
+        withdrawalData.map(async (withdrawal) => {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("name, email, referred_by")
+            .eq("id", withdrawal.user_id)
+            .maybeSingle();
+          return { ...withdrawal, profile };
+        })
+      );
+      setWithdrawals(withdrawalsWithUsers);
+    }
 
     const { data: verificationData } = await supabase.from("verifications").select("*").order("created_at", { ascending: false });
     if (verificationData) {
@@ -53,6 +80,7 @@ function Admin() {
     if (sigData) {
       setSignalPair(sigData.pair);
       setSignalProfit(sigData.profit_percentage);
+      setSignalIsActive(sigData.is_active ?? true);
     }
 
     const today = new Date().toISOString().split("T")[0];
@@ -78,9 +106,11 @@ function Admin() {
     }
   };
 
-  const handleUpdateSignal = async (e) => {
-    e.preventDefault();
+  const handleUpdateSignal = async (e, customActiveStatus) => {
+    if (e) e.preventDefault();
     setSignalMsg("");
+
+    const newActiveState = customActiveStatus !== undefined ? customActiveStatus : signalIsActive;
 
     const { error } = await supabase
       .from("trading_signals")
@@ -88,14 +118,15 @@ function Admin() {
         id: 1,
         pair: signalPair,
         profit_percentage: parseFloat(signalProfit),
-        is_active: true,
+        is_active: newActiveState,
         updated_at: new Date()
       });
 
     if (error) {
       setSignalMsg("Error updating signal: " + error.message);
     } else {
-      setSignalMsg("✅ Signal successfully updated and saved!");
+      setSignalIsActive(newActiveState);
+      setSignalMsg(newActiveState ? "✅ Signal activated and visible!" : "❌ Signal turned OFF and hidden!");
       fetchData();
     }
   };
@@ -241,11 +272,26 @@ function Admin() {
         </div>
       </div>
 
-      {/* TRADING SIGNAAL BEHEREN */}
+      {/* TRADING SIGNAAL BEHEREN MET ON/OFF SCHAKELAAR */}
       <div className="bg-gray-900 p-6 rounded-xl">
-        <h2 className="text-xl font-bold mb-2">Manage Active Trading Signal</h2>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">Manage Active Trading Signal</h2>
+          <div className="flex items-center gap-3">
+            <span className={`text-xs font-bold px-2 py-1 rounded ${signalIsActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+              Status: {signalIsActive ? 'ON (Visible)' : 'OFF (Hidden)'}
+            </span>
+            <button
+              onClick={() => handleUpdateSignal(null, !signalIsActive)}
+              className={`px-4 py-1.5 rounded font-bold text-xs transition ${signalIsActive ? 'bg-red-600 hover:bg-red-500 text-white' : 'bg-emerald-600 hover:bg-emerald-500 text-white'}`}
+            >
+              {signalIsActive ? 'Turn OFF' : 'Turn ON'}
+            </button>
+          </div>
+        </div>
+
         {signalMsg && <div className="p-3 mb-4 rounded bg-emerald-500/10 text-emerald-400 text-sm">{signalMsg}</div>}
-        <form onSubmit={handleUpdateSignal} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        <form onSubmit={(e) => handleUpdateSignal(e, signalIsActive)} className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="text-xs text-gray-400 block mb-1">Trading Pair</label>
             <input type="text" value={signalPair} onChange={(e) => setSignalPair(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white" />
@@ -255,20 +301,20 @@ function Admin() {
             <input type="number" step="0.1" value={signalProfit} onChange={(e) => setSignalProfit(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-sm text-white" />
           </div>
           <div className="flex items-end">
-            <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold py-2 rounded transition text-sm">Update Signal</button>
+            <button type="submit" className="w-full bg-amber-500 hover:bg-amber-600 text-black font-bold py-2 rounded transition text-sm">Save Changes</button>
           </div>
         </form>
       </div>
 
-      {/* GEBRUIKERS & REFERRALS TABEL (GEBRUIKT USERTABLE.JSX) */}
+      {/* GEBRUIKERS & REFERRALS TABEL */}
       <UsersTable users={users} setUsers={setUsers} updateUser={updateUser} />
 
-      {/* MAX TRADES PER GEBRUIKER */}
+      {/* MAX TRADES PER GEBRUIKER (Schuifbaar) */}
       <div className="bg-gray-900 p-6 rounded-xl">
         <h2 className="text-xl font-bold mb-4">Manage Daily Trades Permission per User</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="text-gray-400 border-b border-gray-800">
+        <div className="max-h-[350px] overflow-y-auto overflow-x-auto">
+          <table className="w-full min-w-[500px] text-left text-sm">
+            <thead className="text-gray-400 border-b border-gray-800 sticky top-0 bg-gray-900">
               <tr>
                 <th className="p-3">User Email / Name</th>
                 <th className="p-3">Current Allowed Trades</th>
@@ -298,13 +344,14 @@ function Admin() {
         </div>
       </div>
 
-      {/* DEPOSIT REQUESTS */}
+      {/* DEPOSIT REQUESTS (Schuifbaar) */}
       <div className="bg-gray-900 p-6 rounded-xl">
         <h2 className="text-xl font-bold mb-4">Deposit Requests</h2>
-        <div className="overflow-x-auto w-full">
+        <div className="max-h-[350px] overflow-y-auto overflow-x-auto w-full">
           <table className="w-full min-w-[700px] text-left text-sm">
-            <thead className="text-gray-400">
+            <thead className="text-gray-400 sticky top-0 bg-gray-900">
               <tr>
+                <th className="p-3">User / Ref</th>
                 <th className="p-3">Coin</th>
                 <th className="p-3">Amount</th>
                 <th className="p-3">Status</th>
@@ -314,6 +361,12 @@ function Admin() {
             <tbody>
               {deposits.map((deposit) => (
                 <tr key={deposit.id} className="border-t border-gray-800">
+                  <td className="p-3 font-medium">
+                    <div>{deposit.profile?.name || "Onbekend"}</div>
+                    <div className="text-xs text-gray-400">
+                      {deposit.profile?.email} {deposit.profile?.referred_by ? `(Ref: ${deposit.profile.referred_by})` : ""}
+                    </div>
+                  </td>
                   <td className="p-3">{deposit.coin}</td>
                   <td className="p-3">${deposit.amount}</td>
                   <td className="p-3">{deposit.status}</td>
@@ -332,13 +385,14 @@ function Admin() {
         </div>
       </div>
 
-      {/* WITHDRAWAL REQUESTS */}
+      {/* WITHDRAWAL REQUESTS (Schuifbaar) */}
       <div className="bg-gray-900 p-6 rounded-xl">
         <h2 className="text-xl font-bold mb-4">Withdrawal Requests</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px] text-left">
-            <thead className="text-gray-400">
+        <div className="max-h-[350px] overflow-y-auto overflow-x-auto">
+          <table className="w-full min-w-[700px] text-left text-sm">
+            <thead className="text-gray-400 sticky top-0 bg-gray-900">
               <tr>
+                <th className="p-3">User / Ref</th>
                 <th className="p-3">Coin</th>
                 <th className="p-3">Amount</th>
                 <th className="p-3">Wallet Address</th>
@@ -349,9 +403,15 @@ function Admin() {
             <tbody>
               {withdrawals.map((withdrawal) => (
                 <tr key={withdrawal.id} className="border-t border-gray-800">
+                  <td className="p-3 font-medium">
+                    <div>{withdrawal.profile?.name || "Onbekend"}</div>
+                    <div className="text-xs text-gray-400">
+                      {withdrawal.profile?.email} {withdrawal.profile?.referred_by ? `(Ref: ${withdrawal.profile.referred_by})` : ""}
+                    </div>
+                  </td>
                   <td className="p-3">{withdrawal.coin}</td>
                   <td className="p-3">${withdrawal.amount}</td>
-                  <td className="p-3 break-all max-w-[250px]">{withdrawal.wallet_adress}</td>
+                  <td className="p-3 break-all max-w-[200px]">{withdrawal.wallet_adress}</td>
                   <td className="p-3">{withdrawal.status}</td>
                   <td className="p-3">
                     {withdrawal.status === "Pending" && (
@@ -368,12 +428,12 @@ function Admin() {
         </div>
       </div>
 
-      {/* VERIFICATION REQUESTS */}
+      {/* VERIFICATION REQUESTS (Schuifbaar) */}
       <div className="bg-gray-900 p-6 rounded-xl">
         <h2 className="text-xl font-bold mb-4">ID Verification Requests</h2>
-        <div className="overflow-x-auto w-full">
+        <div className="max-h-[350px] overflow-y-auto overflow-x-auto w-full">
           <table className="w-full min-w-[700px] text-left">
-            <thead className="text-gray-400">
+            <thead className="text-gray-400 sticky top-0 bg-gray-900">
               <tr>
                 <th className="p-3">Name</th>
                 <th className="p-3">Email</th>

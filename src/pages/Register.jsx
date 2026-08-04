@@ -46,7 +46,7 @@ function Register() {
       const user = authData.user;
 
       if (user) {
-        // 2. Sla het profiel direct op in de 'profiles' tabel inclusief de status 'pending'
+       // 2. Sla het profiel direct op in de 'profiles' tabel inclusief de status 'active'
         const { error: profileError } = await supabase
           .from("profiles")
           .upsert({
@@ -54,7 +54,7 @@ function Register() {
             email: form.email,
             name: form.name,
             role: "user",
-            status: "pending", // <--- Nieuwe accounts starten standaard als pending
+            status: "active", // <--- Nieuwe accounts zijn meteen actief en kunnen inloggen
             referred_by: referredBy
           });
 
@@ -69,7 +69,7 @@ function Register() {
         });
       }
 
-      alert("Account created successfully! Please wait for admin approval.");
+      alert("Account created successfully! You can now log in.");
       setForm({ name: "", email: "", password: "", confirmPassword: "" });
     } catch (error) {
       console.log("Registratie fout:", error);
