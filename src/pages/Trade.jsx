@@ -96,7 +96,19 @@ function Trade() {
   }, []);
 
   const isTradeUnlocked = (tradeNum) => {
-    return true; 
+    const schedule = scheduleTimes[tradeNum];
+    if (!schedule) return true; // Als er geen schema voor is, standaard open
+
+    const now = currentTime;
+    const targetTime = new Date(now);
+    targetTime.setHours(schedule.hour, schedule.minute, 0, 0);
+
+    // 10 minuten voor de geplande tijd
+    const openingTime = new Date(targetTime.getTime() - 10 * 60 * 1000);
+    // 25 minuten na de geplande tijd (daarna sluit hij weer)
+    const closingTime = new Date(targetTime.getTime() + 25 * 60 * 1000);
+
+    return now >= openingTime && now <= closingTime;
   };
 
   const handleExecuteTrade = async (tradeNum) => {
