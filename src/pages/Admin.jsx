@@ -149,26 +149,41 @@ function Admin() {
   };
 
   const updateUser = async (user) => {
-    if (user.wallet) {
-      const { error } = await supabase
-        .from("wallets")
-        .update({
-          total_deposit: user.wallet.total_deposit,
-          balance: user.wallet.balance,
-          bonus: user.wallet.bonus
-        })
-        .eq("user_id", user.id);
+    try {
+      // 1. Update de status in de 'profiles' tabel
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ status: user.status })
+        .eq("id", user.id);
 
-      if (error) {
-        console.log(error);
+      if (profileError) {
+        alert("Fout bij opslaan status: " + profileError.message);
         return;
       }
+
+      // 2. Update de wallet gegevens als deze aanwezig zijn
+      if (user.wallet) {
+        const { error: walletError } = await supabase
+          .from("wallets")
+          .update({
+            total_deposit: Number(user.wallet.total_deposit || 0),
+            balance: Number(user.wallet.balance || 0),
+            bonus: Number(user.wallet.bonus || 0)
+          })
+          .eq("user_id", user.id);
+
+        if (walletError) {
+          alert("Fout bij opslaan wallet: " + walletError.message);
+          return;
+        }
+      }
+
+      alert("✅ Gebruiker succesvol bijgewerkt!");
+      fetchData();
+    } catch (err) {
+      console.error("Onverwachte fout:", err);
+      alert("Er ging iets mis bij het opslaan.");
     }
-
-    await supabase.from("profiles").update({ status: user.status }).eq("id", user.id);
-
-    alert("User updated");
-    fetchData();
   };
 
   const approveDeposit = async (deposit) => {

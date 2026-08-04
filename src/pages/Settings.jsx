@@ -1,19 +1,49 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 
 function Settings() {
   const [twoFA, setTwoFA] = useState(false);
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [message, setMessage] = useState("");
+  const [referralLink, setReferralLink] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  // Haal gebruikersgegevens op en genereer de unieke referral link
+  useEffect(() => {
+    async function fetchUserData() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setEmail(user.email || "");
+        
+        // Haal eventueel de gebruikersnaam op uit de metadata of gebruik de e-mail / ID
+        const userCode = user.user_metadata?.name || user.email.split('@')[0];
+        setUsername(userCode);
+
+        // Maak de unieke referral link op basis van jouw Vercel URL
+        const generatedLink = `https://cashprime.vercel.app/register?ref=${userCode}`;
+        setReferralLink(generatedLink);
+      }
+    }
+    fetchUserData();
+  }, []);
 
   const handleSave = (e) => {
     e.preventDefault();
-    // Simuleer succesvolle opslag en toon het 2FA/settings bericht
-    setMessage("(2FA) Two Factor Authentication is ON");
+    setMessage("Two Factor Authentication is ON");
     setTimeout(() => {
       setMessage("");
-    }, 5000); // Laat het bericht na 5 seconden verdwijnen
+    }, 5000);
   };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(referralLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 3000);
+  };
+
+  // Genereer een automatische QR-code URL op basis van de referral link
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(referralLink)}`;
 
   return (
     <div className="bg-gray-900 p-6 rounded-xl max-w-xl text-white">
@@ -23,7 +53,7 @@ function Settings() {
       </h1>
 
       {message && (
-        <div className="bg-green-950/60 border border-green-800 text-green-400 p-3 rounded-lg mb-4 text-sm">
+        <div className="bg-green-950/60 border border-green-800 text-green-400 p-3 rounded-lg mb-4 text-sm font-medium">
           {message}
         </div>
       )}
@@ -41,9 +71,8 @@ function Settings() {
           <input
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="bg-gray-700 p-3 rounded w-full mt-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="user@email.com"
+            disabled
+            className="bg-gray-700/50 text-gray-300 p-3 rounded w-full mt-2 cursor-not-allowed"
           />
 
           <label className="text-gray-400 block mt-5">
@@ -52,11 +81,51 @@ function Settings() {
           <input
             type="text"
             value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="bg-gray-700 p-3 rounded w-full mt-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Username"
+            disabled
+            className="bg-gray-700/50 text-gray-300 p-3 rounded w-full mt-2 cursor-not-allowed"
           />
 
+        </div>
+
+        {/* --- REFERRAL PROGRAM & QR CODE SECTIE --- */}
+        <div className="bg-gray-800 p-5 rounded-xl mt-6">
+          <h2 className="text-xl font-bold mb-2">
+            Referral Program
+          </h2>
+          <p className="text-gray-400 text-sm mb-4">
+            Share your link or QR code with friends. Earn bonuses when they join your network!
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center gap-4 bg-gray-900 p-4 rounded-lg border border-gray-700">
+            {/* QR Code */}
+            <div className="bg-white p-2 rounded-lg flex-shrink-0">
+              <img 
+                src={qrCodeUrl} 
+                alt="Referral QR Code" 
+                className="w-28 h-28 object-contain"
+              />
+            </div>
+
+            {/* Link & Copy optie */}
+            <div className="w-full flex flex-col justify-center">
+              <label className="text-gray-400 text-xs uppercase font-semibold mb-1">
+                Your Unique Invite Link
+              </label>
+              <input
+                type="text"
+                readOnly
+                value={referralLink}
+                className="bg-gray-800 text-blue-400 text-sm p-2.5 rounded border border-gray-700 w-full mb-3 select-all"
+              />
+              <button
+                type="button"
+                onClick={copyToClipboard}
+                className="bg-gray-700 hover:bg-gray-600 text-white text-sm py-2 px-4 rounded transition font-medium w-full sm:w-auto text-center"
+              >
+                {copied ? "Copied to Clipboard!" : "Copy Link"}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="bg-gray-800 p-5 rounded-xl mt-6">
