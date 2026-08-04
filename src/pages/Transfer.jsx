@@ -18,18 +18,18 @@ export default function Transfer() {
   const fetchBalances = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
+      // Gebruik de bestaande kolommen uit je database: balance en bonus
       const { data } = await supabase
         .from("wallets")
-        .select("balance, trading_balance")
+        .select("balance, bonus")
         .eq("user_id", user.id)
         .single();
       
       if (data) {
         const total = Number(data.balance || 0);
-        const trading = Number(data.trading_balance || 0);
+        const trading = Number(data.bonus || 0); // We gebruiken bonus als Trade/Trading saldo
         
-        // De Exchange balance is het totale tegoed minus wat er al in Trade staat, 
-        // zodat de som altijd netjes klopt (bijv. 475 totaal = 75 exchange + 400 trade)
+        // De Exchange balance is het totaal minus wat er in trade/bonus staat
         const exchange = Math.max(0, total - trading);
 
         setTotalBalance(total);
@@ -71,19 +71,18 @@ export default function Transfer() {
       return;
     }
 
-    // Bereken de nieuwe trading balance direct op basis van de actuele waarden
     let newTrading = tradingBalance;
     if (fromAccount === "Exchange" && toAccount === "Trade") {
-      newTrading += transferAmount; // Geld naar trade
+      newTrading += transferAmount; 
     } else if (fromAccount === "Trade" && toAccount === "Exchange") {
-      newTrading -= transferAmount; // Geld terug naar exchange
+      newTrading -= transferAmount; 
     }
 
-    // STUUR DIT DIRECT NAAR SUPABASE (We updaten ALLEEN trading_balance, totale balance blijft 475)
+    // Update de 'bonus' kolom in de database als opslag voor het trade-saldo
     const { error } = await supabase
       .from("wallets")
       .update({
-        trading_balance: parseFloat(newTrading.toFixed(2)),
+        bonus: parseFloat(newTrading.toFixed(2)),
       })
       .eq("user_id", user.id);
 
@@ -94,7 +93,7 @@ export default function Transfer() {
     } else {
       setMessage(`✅ Successfully transferred $${transferAmount.toFixed(2)} from ${fromAccount} to ${toAccount}!`);
       setAmount("");
-      fetchBalances(); // Herlaad de balansen direct op het scherm
+      fetchBalances(); 
     }
   };
 

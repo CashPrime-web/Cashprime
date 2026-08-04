@@ -19,7 +19,6 @@ function UsersTable({ users, setUsers, updateUser }) {
     setUsers(updatedUsers);
   };
 
-  // Specifieke functie voor het wijzigen van de status
   const handleStatusChange = (id, newStatus) => {
     const updatedUsers = users.map((u) =>
       u.id === id ? { ...u, status: newStatus } : u
@@ -48,24 +47,20 @@ function UsersTable({ users, setUsers, updateUser }) {
           <tbody>
             {users.map((user) => (
               <tr key={user.id} className="border-t border-gray-800 hover:bg-gray-800/30">
-                
-                {/* Naam en Email */}
                 <td className="p-3">
                   <div className="font-semibold">{user.name || "Geen naam"}</div>
                   <div className="text-xs text-gray-400">{user.email}</div>
                 </td>
 
-                {/* Upline / Gebracht door */}
                 <td className="p-3 font-medium text-blue-400">
                   {user.referred_by ? `@${user.referred_by}` : "Direct / Geen"}
                 </td>
 
-                {/* Status */}
                 <td className="p-3">
                   <select
                     value={user.status || "Pending"}
                     onChange={(e) => handleStatusChange(user.id, e.target.value)}
-                    className="bg-gray-800 p-2 rounded text-white border border-gray-700 focus:outline-none"
+                    className="bg-gray-800 p-2 rounded text-white border border-gray-700 focus:outline-none text-xs"
                   >
                     <option value="Pending">Pending</option>
                     <option value="Active">Active</option>
@@ -73,37 +68,33 @@ function UsersTable({ users, setUsers, updateUser }) {
                   </select>
                 </td>
 
-                {/* Balance */}
                 <td className="p-3">
                   <input
                     type="number"
                     value={user.wallet?.balance || 0}
                     onChange={(e) => handleChange(user.id, "balance", e.target.value)}
-                    className="bg-gray-800 p-2 rounded w-28 text-white"
+                    className="bg-gray-800 p-2 rounded w-28 text-white text-xs"
                   />
                 </td>
 
-                {/* Bonus */}
                 <td className="p-3">
                   <input
                     type="number"
                     value={user.wallet?.bonus || 0}
                     onChange={(e) => handleChange(user.id, "bonus", e.target.value)}
-                    className="bg-gray-800 p-2 rounded w-28 text-white"
+                    className="bg-gray-800 p-2 rounded w-28 text-white text-xs"
                   />
                 </td>
 
-                {/* Total Deposit */}
                 <td className="p-3">
                   <input
                     type="number"
                     value={user.wallet?.total_deposit || 0}
                     onChange={(e) => handleChange(user.id, "total_deposit", e.target.value)}
-                    className="bg-gray-800 p-2 rounded w-28 text-white"
+                    className="bg-gray-800 p-2 rounded w-28 text-white text-xs"
                   />
                 </td>
 
-                {/* Save Action */}
                 <td className="p-3">
                   <button
                     onClick={() => updateUser(user)}
@@ -112,7 +103,6 @@ function UsersTable({ users, setUsers, updateUser }) {
                     Save
                   </button>
                 </td>
-
               </tr>
             ))}
           </tbody>

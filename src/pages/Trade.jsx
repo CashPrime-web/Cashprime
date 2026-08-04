@@ -10,13 +10,11 @@ function Trade() {
   const [totalProfit, setTotalProfit] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Klok voor tijdscontrole elke 10 seconden
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 10000);
     return () => clearInterval(timer);
   }, []);
 
-  // Vaste handelstijden per trade-nummer
   const scheduleTimes = {
     1: { hour: 10, minute: 0, label: "10:00 AM" },
     2: { hour: 12, minute: 0, label: "12:00 PM" },
@@ -25,10 +23,7 @@ function Trade() {
   };
 
   const fetchAppData = async () => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     // 1. Haal profiel
@@ -39,20 +34,18 @@ function Trade() {
       .maybeSingle();
     setUserProfile(profile);
 
-    // 2. Haal wallet (inclusief trading_balance)
+    // 2. Haal wallet (inclusief bonus als trading saldo)
     const { data: walletData } = await supabase
       .from("wallets")
       .select("*")
       .eq("user_id", user.id)
       .maybeSingle();
     
-    console.log("WAT ZIT ER IN WALLETDATA:", walletData);
-
     if (walletData) {
       setWallet(walletData);
     }
 
-    // 3. Haal actueel ingestelde signaal
+    // 3. Haal signaal
     const { data: sigData } = await supabase
       .from("trading_signals")
       .select("*")
@@ -60,7 +53,7 @@ function Trade() {
       .maybeSingle();
     setSignal(sigData);
 
-    // 4. Haal uitgevoerde trades van vandaag op
+    // 4. Haal trades van vandaag
     const today = new Date().toISOString().split("T")[0];
     const { data: tradesToday } = await supabase
       .from("user_trades")
@@ -72,7 +65,7 @@ function Trade() {
       setCompletedTrades(tradesToday.map((t) => t.trade_number));
     }
 
-    // 5. Bereken totale all-time winst
+    // 5. Totale winst
     const { data: allTrades } = await supabase
       .from("user_trades")
       .select("profit_amount")
@@ -90,76 +83,38 @@ function Trade() {
 
   useEffect(() => {
     fetchAppData();
-    
-    // Realtime listener met correcte async constructie
-    const setupRealtime = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
 
-      const channel = supabase
-        .channel("wallet-changes")
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "wallets",
-            filter: `user_id=eq.${user.id}`,
-          },
-          (payload) => {
-            if (payload.new) {
-              setWallet(payload.new);
-            }
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    };
-
-    setupRealtime();
+    const handleFocus = () => fetchAppData();
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
   }, []);
 
   const isTradeUnlocked = (tradeNum) => {
-    const config = scheduleTimes[tradeNum];
-    if (!config) return false;
-
-    const now = currentTime;
-    const unlockTime = new Date(now);
-    unlockTime.setHours(config.hour, config.minute - 10, 0, 0);
-
-    const endTime = new Date(now);
-    endTime.setHours(config.hour + 1, config.minute, 0, 0);
-
-    return now >= unlockTime && now <= endTime;
+    return true; 
   };
 
-  // UITVOEREN VAN TRADE
   const handleExecuteTrade = async (tradeNum) => {
     setLoading(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user || !wallet) {
       setLoading(false);
       return;
     }
 
     const activeProfitPct = signal ? parseFloat(signal.profit_percentage) : 2.0; 
-    const currentTradingBalance = Number(wallet.trading_balance || 0);
+    
+    // Gebruik 'bonus' als het Trade-saldo om te matchen met Transfer.jsx
+    const currentTradingBalance = Number(wallet.bonus || 0);
     const currentTotalBalance = Number(wallet.balance || 0);
 
     if (currentTradingBalance <= 0) {
-      alert("⚠️ Your trading balance is $0.00. Please transfer funds to your trading account first.");
+      alert("⚠️ Your trade account balance is $0.00. Please transfer funds from your Exchange account first.");
       setLoading(false);
       return;
     }
 
     const profitAmount = currentTradingBalance * (activeProfitPct / 100);
-    
     const newTradingBalance = currentTradingBalance + profitAmount;
     const newTotalBalance = currentTotalBalance + profitAmount;
     const newTodaysEarnings = Number(wallet.todays_earnings || 0) + profitAmount;
@@ -181,13 +136,16 @@ function Trade() {
       return;
     }
 
+    // Update zowel de totale balans als de bonus (trade-saldo) en de winst
+    const updatePayload = {
+      balance: parseFloat(newTotalBalance.toFixed(2)),
+      bonus: parseFloat(newTradingBalance.toFixed(2)),
+      todays_earnings: parseFloat(newTodaysEarnings.toFixed(2)),
+    };
+
     const { error: walletErr } = await supabase
       .from("wallets")
-      .update({
-        balance: parseFloat(newTotalBalance.toFixed(2)),
-        trading_balance: parseFloat(newTradingBalance.toFixed(2)),
-        todays_earnings: parseFloat(newTodaysEarnings.toFixed(2)),
-      })
+      .update(updatePayload)
       .eq("user_id", user.id);
 
     setLoading(false);
@@ -195,21 +153,24 @@ function Trade() {
     if (walletErr) {
       alert("Error updating wallet: " + walletErr.message);
     } else {
-        alert(`✅ Trade #${tradeNum} Executed! Profit added: +$${profitAmount.toFixed(2)} (${activeProfitPct}%)`);
-        fetchAppData();
+      alert(`✅ Trade #${tradeNum} Executed! Profit added: +$${profitAmount.toFixed(2)} (${activeProfitPct}%)`);
+      fetchAppData();
     }
   };
 
   const maxTrades = userProfile?.max_daily_trades || 2;
   const availableTradeNumbers = Array.from({ length: maxTrades }, (_, i) => i + 1);
 
+  // Bereken de exchange balans op dezelfde manier als in Transfer.jsx
+  const totalValuation = Number(wallet?.balance || 0);
+  const tradingBal = Number(wallet?.bonus || 0);
+  const exchangeBal = Math.max(0, totalValuation - tradingBal);
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-
-      {/* HEADER */}
       <div className="flex justify-between items-center pb-4 border-b border-gray-800">
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-bold text-white">
             Welcome back, {userProfile?.name || "Trader"}!
           </h1>
           <p className="text-xs text-gray-400 mt-1">Trading & Earnings Overview</p>
@@ -219,30 +180,23 @@ function Trade() {
         </span>
       </div>
 
-      {/* DASHBOARD CARDS / STATS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        
-        {/* ASSET VALUATION / TOTAL BALANCE */}
         <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
           <p className="text-xs text-gray-400 font-semibold uppercase">Asset Valuation</p>
           <h2 className="text-2xl font-black text-white mt-2">
-            ${wallet?.balance ? Number(wallet.balance).toFixed(2) : "0.00"}
+            ${totalValuation.toFixed(2)}
           </h2>
-          <p className="text-xs text-emerald-400 mt-2 font-medium">
-            ✓ Base capital + cumulative earnings
-          </p>
+          <p className="text-xs text-emerald-400 mt-2 font-medium">✓ Base capital + earnings</p>
         </div>
 
-        {/* TRADING BALANCE */}
         <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
           <p className="text-xs text-gray-400 font-semibold uppercase">Trading Balance</p>
           <h2 className="text-2xl font-black text-amber-400 mt-2">
-            ${wallet?.trading_balance ? Number(wallet.trading_balance).toFixed(2) : "0.00"}
+            ${tradingBal.toFixed(2)}
           </h2>
           <p className="text-xs text-gray-400 mt-2">Active funds in trade</p>
         </div>
 
-        {/* TODAY'S EARNINGS */}
         <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
           <p className="text-xs text-gray-400 font-semibold uppercase">Today's Earnings</p>
           <h2 className="text-2xl font-black text-emerald-400 mt-2">
@@ -251,7 +205,6 @@ function Trade() {
           <p className="text-xs text-gray-400 mt-2">Generated today</p>
         </div>
 
-        {/* TOTAL EARNINGS */}
         <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
           <p className="text-xs text-gray-400 font-semibold uppercase">Total Earnings</p>
           <h2 className="text-2xl font-black text-amber-400 mt-2">
@@ -261,7 +214,6 @@ function Trade() {
         </div>
       </div>
 
-      {/* TRADING SIGNAL OVERVIEW */}
       <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex justify-between items-center text-sm">
         <div>
           <span className="text-gray-400">Active Pair: </span>
@@ -273,9 +225,8 @@ function Trade() {
         </div>
       </div>
 
-      {/* TRADING SESSIONS */}
       <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Daily Trading Sessions ({maxTrades} Allowed)</h2>
+        <h2 className="text-lg font-semibold text-white">Daily Trading Sessions ({maxTrades} Allowed)</h2>
 
         {availableTradeNumbers.map((num) => {
           const isDone = completedTrades.includes(num);
@@ -283,14 +234,11 @@ function Trade() {
           const timeInfo = scheduleTimes[num];
 
           return (
-            <div
-              key={num}
-              className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex items-center justify-between"
-            >
+            <div key={num} className="bg-gray-900 p-4 rounded-xl border border-gray-800 flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-base">Trade #{num}</h3>
+                <h3 className="font-bold text-base text-white">Trade #{num}</h3>
                 <p className="text-xs text-gray-400 mt-1">
-                  Scheduled: <span className="text-gray-200">{timeInfo?.label}</span> (Opens 10m prior)
+                  Scheduled: <span className="text-gray-200">{timeInfo?.label || "Anytime"}</span>
                 </p>
               </div>
 
@@ -320,7 +268,6 @@ function Trade() {
           );
         })}
       </div>
-
     </div>
   );
 }

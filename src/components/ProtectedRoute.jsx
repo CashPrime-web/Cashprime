@@ -2,54 +2,79 @@ import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
-
 function ProtectedRoute({ children }) {
-
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
+  const [authorized, setAuthorized] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
+    const checkUserStatus = async () => {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    const checkUser = async () => {
+      if (userError || !user) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
 
-      const { data } = await supabase.auth.getUser();
+      // Haal de status op uit de profiles tabel
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("status, role")
+        .eq("id", user.id)
+        .single();
 
-      setUser(data.user);
+      if (profileError || !profile) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
 
+      // Als de gebruiker admin is, altijd toelaten (optioneel handig)
+      if (profile.role === "admin") {
+        setAuthorized(true);
+        setLoading(false);
+        return;
+      }
+
+      // Controleer de status van de klant
+      if (profile.status === "blocked") {
+        await supabase.auth.signOut();
+        setMessage("Jouw account is geblokkeerd door de beheerder.");
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
+
+      if (profile.status === "pending") {
+        await supabase.auth.signOut();
+        setMessage("Jouw account is nog in afwachting van goedkeuring (pending).");
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
+
+      // Als status 'active' is
+      setAuthorized(true);
       setLoading(false);
-
     };
 
-
-    checkUser();
-
-
+    checkUserStatus();
   }, []);
 
-
-
   if (loading) {
-
     return (
-      <div className="text-white">
-        Loading...
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <p className="animate-pulse text-sm text-gray-400">Controleren van accountstatus...</p>
       </div>
     );
-
   }
 
-
-  if (!user) {
-
-    return <Navigate to="/login" />;
-
+  if (!authorized) {
+    return <Navigate to="/login" replace state={{ errorMsg: message }} />;
   }
-
 
   return children;
-
 }
-
 
 export default ProtectedRoute;

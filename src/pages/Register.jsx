@@ -46,7 +46,7 @@ function Register() {
       const user = authData.user;
 
       if (user) {
-        // 2. Sla het profiel direct op in de 'profiles' tabel met de referral code
+        // 2. Sla het profiel direct op in de 'profiles' tabel inclusief de status 'pending'
         const { error: profileError } = await supabase
           .from("profiles")
           .upsert({
@@ -54,6 +54,7 @@ function Register() {
             email: form.email,
             name: form.name,
             role: "user",
+            status: "pending", // <--- Nieuwe accounts starten standaard als pending
             referred_by: referredBy
           });
 
@@ -68,7 +69,7 @@ function Register() {
         });
       }
 
-      alert("Account created successfully!");
+      alert("Account created successfully! Please wait for admin approval.");
       setForm({ name: "", email: "", password: "", confirmPassword: "" });
     } catch (error) {
       console.log("Registratie fout:", error);

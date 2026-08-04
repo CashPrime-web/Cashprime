@@ -26,21 +26,54 @@ function Login() {
     setError("");
     setLoading(true);
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
+    // 1. Probeer in te loggen bij Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: form.email,
       password: form.password
     });
 
-    if (authError) {
+    if (authError || !authData.user) {
       setError("Onjuist e-mailadres of wachtwoord.");
       setLoading(false);
       return;
     }
 
+    const userId = authData.user.id;
+
+    // 2. Haal direct het profiel op om de status te controleren
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("status")
+      .eq("id", userId)
+      .single();
+
+    if (profileError) {
+      console.error("Fout bij ophalen profiel:", profileError);
+    }
+
+    // Controleer de status (indien er een profiel is gevonden)
+    if (profile) {
+      // Als het account geblokkeerd is (gecorrigeerd naar hoofdletter "Blocked")
+      if (profile.status === "Blocked") {
+        await supabase.auth.signOut(); // Direct uitloggen
+        setError("Jouw account is geblokkeerd. Neem contact op met de beheerder.");
+        setLoading(false);
+        return;
+      }
+
+      // Als het account nog in afwachting (pending) is (gecorrigeerd naar hoofdletter "Pending")
+      if (profile.status === "Pending") {
+        await supabase.auth.signOut(); // Direct uitloggen
+        setError("Jouw account is nog in afwachting (pending) van goedkeuring door de admin.");
+        setLoading(false);
+        return;
+      }
+    }
+
+    // 3. Als alles akkoord is (Active of geen status), door naar de app
     setLoading(false);
     navigate("/");
   };
-
   return (
     <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
       <div className="bg-gray-900 p-8 rounded-xl w-full max-w-md">
