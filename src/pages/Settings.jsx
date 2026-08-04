@@ -8,21 +8,45 @@ function Settings() {
   const [message, setMessage] = useState("");
   const [referralLink, setReferralLink] = useState("");
   const [copied, setCopied] = useState(false);
+  const [groupReferralsCount, setGroupReferralsCount] = useState(0);
 
-  // Haal gebruikersgegevens op en genereer de unieke referral link
-  useEffect(() => {
+useEffect(() => {
     async function fetchUserData() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         setEmail(user.email || "");
         
-        // Haal eventueel de gebruikersnaam op uit de metadata of gebruik de e-mail / ID
-        const userCode = user.user_metadata?.name || user.email.split('@')[0];
+        // 1. Haal direct het juiste profiel op voor DEZE ingelogde gebruiker via zijn ID
+        const { data: currentProfile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        // Gebruik de naam uit de database, of anders de e-mail als fallback
+        const userCode = currentProfile?.name || user.email.split('@')[0];
         setUsername(userCode);
 
-        // Maak de unieke referral link op basis van jouw Vercel URL
-        const generatedLink = `https://cashprime.vercel.app/register?ref=${userCode}`;
+        const currentDomain = window.location.origin;
+        const generatedLink = `${currentDomain}/register?ref=${userCode}`;
         setReferralLink(generatedLink);
+
+        // 2. Haal alle profielen op om het aantal group referrals te tellen
+        const { data: allUsers, error } = await supabase
+          .from("profiles")
+          .select("*");
+
+        if (!error && allUsers) {
+          const cleanUserCode = userCode.toLowerCase().replace(/\s+/g, '');
+          
+          const count = allUsers.filter((u) => {
+            if (!u.referred_by) return false;
+            const cleanReferredBy = u.referred_by.toLowerCase().replace(/\s+/g, '');
+            return cleanReferredBy === cleanUserCode;
+          }).length;
+
+          setGroupReferralsCount(count);
+        }
       }
     }
     fetchUserData();
@@ -42,7 +66,6 @@ function Settings() {
     setTimeout(() => setCopied(false), 3000);
   };
 
-  // Genereer een automatische QR-code URL op basis van de referral link
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(referralLink)}`;
 
   return (
@@ -89,9 +112,14 @@ function Settings() {
 
         {/* --- REFERRAL PROGRAM & QR CODE SECTIE --- */}
         <div className="bg-gray-800 p-5 rounded-xl mt-6">
-          <h2 className="text-xl font-bold mb-2">
-            Referral Program
-          </h2>
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-xl font-bold">
+              Referral Program
+            </h2>
+            <div className="bg-gray-900 border border-gray-700 px-3 py-1 rounded-lg text-xs font-semibold text-gray-300">
+              Group Referrals: <span className="text-blue-400 font-bold ml-1">{groupReferralsCount}</span>
+            </div>
+          </div>
           <p className="text-gray-400 text-sm mb-4">
             Share your link or QR code with friends. Earn bonuses when they join your network!
           </p>

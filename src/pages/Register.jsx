@@ -17,7 +17,7 @@ function Register() {
     });
   };
 
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (form.password !== form.confirmPassword) {
@@ -25,7 +25,7 @@ function Register() {
       return;
     }
 
-    // Pak de 'ref' code uit de URL (bijv. ?ref=stockholm)
+    // Pak de 'ref' code uit de URL
     const queryParams = new URLSearchParams(window.location.search);
     const referredBy = queryParams.get("ref") || null;
 
@@ -46,7 +46,7 @@ function Register() {
       const user = authData.user;
 
       if (user) {
-       // 2. Sla het profiel direct op in de 'profiles' tabel inclusief de status 'active'
+       // 2. Sla het profiel direct op in de 'profiles' tabel
         const { error: profileError } = await supabase
           .from("profiles")
           .upsert({
@@ -54,7 +54,7 @@ function Register() {
             email: form.email,
             name: form.name,
             role: "user",
-            status: "active", // <--- Nieuwe accounts zijn meteen actief en kunnen inloggen
+            status: "active",
             referred_by: referredBy
           });
 
@@ -68,6 +68,9 @@ function Register() {
           balance: 0.00
         });
       }
+
+      // BELANGRIJK: Log direct uit zodat de registratie-sessie de browser van de ingelogde admin/gebruiker niet overschrijft!
+      await supabase.auth.signOut();
 
       alert("Account created successfully! You can now log in.");
       setForm({ name: "", email: "", password: "", confirmPassword: "" });
