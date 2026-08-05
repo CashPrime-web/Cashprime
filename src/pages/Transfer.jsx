@@ -18,7 +18,6 @@ export default function Transfer() {
   const fetchBalances = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // Gebruik de bestaande kolommen uit je database: balance en bonus
       const { data } = await supabase
         .from("wallets")
         .select("balance, bonus")
@@ -27,9 +26,7 @@ export default function Transfer() {
       
       if (data) {
         const total = Number(data.balance || 0);
-        const trading = Number(data.bonus || 0); // We gebruiken bonus als Trade/Trading saldo
-        
-        // De Exchange balance is het totaal minus wat er in trade/bonus staat
+        const trading = Number(data.bonus || 0);
         const exchange = Math.max(0, total - trading);
 
         setTotalBalance(total);

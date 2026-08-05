@@ -122,7 +122,7 @@ function Login() {
             disabled={loading}
             className="bg-blue-600 hover:bg-blue-500 transition w-full py-3 rounded mt-6 font-bold disabled:opacity-50"
           >
-            {loading ? "Bezig..." : "Login"}
+            {loading ? "Loading..." : "Login"}
           </button>
         </form>
 
