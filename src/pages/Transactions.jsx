@@ -91,70 +91,72 @@ function Transactions() {
         Transactions
       </h1>
 
-      <div className="bg-gray-900 rounded-xl p-6 overflow-x-auto">
-        <table className="w-full text-left">
-          <thead className="text-gray-400 border-b border-gray-700">
-            <tr>
-              <th className="p-3">Asset</th>
-              <th className="p-3">Type</th>
-              <th className="p-3">Network / Address</th>
-              <th className="p-3">Amount</th>
-              <th className="p-3">Date</th>
-              <th className="p-3">Status</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {transactions.length === 0 && (
+      <div className="bg-gray-900 rounded-xl p-6">
+        <div className="max-h-[350px] overflow-y-auto overflow-x-auto border border-gray-800 rounded-lg">
+          <table className="w-full text-left">
+            <thead className="text-gray-400 border-b border-gray-700 sticky top-0 bg-gray-900 z-10">
               <tr>
-                <td colSpan="6" className="p-5 text-gray-400 text-center">
-                  No transactions yet
-                </td>
+                <th className="p-3">Asset</th>
+                <th className="p-3">Type</th>
+                <th className="p-3">Network / Address</th>
+                <th className="p-3">Amount</th>
+                <th className="p-3">Date</th>
+                <th className="p-3">Status</th>
               </tr>
-            )}
+            </thead>
 
-            {transactions.map((tx) => (
-              <tr key={tx.id + tx.txType} className="border-b border-gray-800">
-                <td className="p-3">
-                  <div className="flex items-center gap-3">
-                    {coinLogo(tx.coin)}
-                    <span className="font-bold">
-                      {tx.coin}
+            <tbody>
+              {transactions.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="p-5 text-gray-400 text-center">
+                    No transactions yet
+                  </td>
+                </tr>
+              )}
+
+              {transactions.map((tx) => (
+                <tr key={tx.id + tx.txType} className="border-b border-gray-800">
+                  <td className="p-3">
+                    <div className="flex items-center gap-3">
+                      {coinLogo(tx.coin)}
+                      <span className="font-bold">
+                        {tx.coin}
+                      </span>
+                    </div>
+                  </td>
+
+                  <td className="p-3">
+                    <span className={tx.txType === "Deposit" ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>
+                      {tx.txType}
                     </span>
-                  </div>
-                </td>
+                  </td>
 
-                <td className="p-3">
-                  <span className={tx.txType === "Deposit" ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>
-                    {tx.txType}
-                  </span>
-                </td>
+                  <td className="p-3 text-gray-300 text-xs break-all max-w-[200px]">
+                    {tx.networkInfo || "-"}
+                  </td>
 
-                <td className="p-3 text-gray-300 text-xs break-all max-w-[200px]">
-                  {tx.networkInfo || "-"}
-                </td>
+                  <td className="p-3 font-bold">
+                    ${tx.amount}
+                  </td>
 
-                <td className="p-3 font-bold">
-                  ${tx.amount}
-                </td>
+                  <td className="p-3 text-gray-400">
+                    {new Date(tx.created_at).toLocaleDateString()}
+                  </td>
 
-                <td className="p-3 text-gray-400">
-                  {new Date(tx.created_at).toLocaleDateString()}
-                </td>
-
-                <td className={
-                  tx.status === "Approved"
-                    ? "p-3 text-green-400 font-bold"
-                    : tx.status === "Rejected"
-                    ? "p-3 text-red-400 font-bold"
-                    : "p-3 text-yellow-400 font-bold"
-                }>
-                  {tx.status}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <td className={
+                    tx.status === "Approved"
+                      ? "p-3 text-green-400 font-bold"
+                      : tx.status === "Rejected"
+                      ? "p-3 text-red-400 font-bold"
+                      : "p-3 text-yellow-400 font-bold"
+                  }>
+                    {tx.status}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -1,158 +1,294 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "../lib/supabase";
-
-export default function Transfer() {
+function TransferPage({ exchangeBalance, tradeBalance, refreshDashboard }) {
   const [fromAccount, setFromAccount] = useState("Exchange");
   const [toAccount, setToAccount] = useState("Trade");
   const [amount, setAmount] = useState("");
-  const [exchangeBalance, setExchangeBalance] = useState(0);
-  const [tradingBalance, setTradingBalance] = useState(0);
-  const [totalBalance, setTotalBalance] = useState(0);
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ text: "", type: "" });
 
-  useEffect(() => {
-    fetchBalances();
-  }, []);
+  const maxAvailable =
+    fromAccount === "Exchange" ? exchangeBalance : tradeBalance;
 
-  const fetchBalances = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      const { data } = await supabase
-        .from("wallets")
-        .select("balance, bonus")
-        .eq("user_id", user.id)
-        .single();
-      
-      if (data) {
-        const total = Number(data.balance || 0);
-        const trading = Number(data.bonus || 0);
-        const exchange = Math.max(0, total - trading);
-
-        setTotalBalance(total);
-        setExchangeBalance(exchange);
-        setTradingBalance(trading);
-      }
-    }
-  };
 
   const handleTransfer = async (e) => {
-    e.preventDefault();
-    setMessage("");
-    const transferAmount = parseFloat(amount);
+  e.preventDefault();
 
-    if (isNaN(transferAmount) || transferAmount <= 0) {
-      setMessage("⚠️ Please enter a valid amount.");
-      return;
-    }
+  const numAmount = Number(amount);
 
-    if (fromAccount === "Exchange" && toAccount === "Trade") {
-      if (transferAmount > exchangeBalance) {
-        setMessage("⚠️ Insufficient funds in Exchange Account.");
-        return;
-      }
-    } else if (fromAccount === "Trade" && toAccount === "Exchange") {
-      if (transferAmount > tradingBalance) {
-        setMessage("⚠️ Insufficient funds in Trade Account.");
-        return;
-      }
-    } else {
-      setMessage("⚠️ Invalid transfer direction.");
-      return;
-    }
+  if (!numAmount || numAmount <= 0) {
+    setMessage({
+      text: "Please enter a valid amount.",
+      type: "error"
+    });
+    return;
+  }
 
-    setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+  if (numAmount > maxAvailable) {
+    setMessage({
+      text: "Insufficient balance.",
+      type: "error"
+    });
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
     if (!user) {
-      setLoading(false);
-      return;
+      throw new Error("User not logged in");
     }
 
-    let newTrading = tradingBalance;
-    if (fromAccount === "Exchange" && toAccount === "Trade") {
-      newTrading += transferAmount; 
-    } else if (fromAccount === "Trade" && toAccount === "Exchange") {
-      newTrading -= transferAmount; 
-    }
-
-    // Update de 'bonus' kolom in de database als opslag voor het trade-saldo
-    const { error } = await supabase
+    // Haal echte wallet op
+    const {
+      data: walletData,
+      error: walletError
+    } = await supabase
       .from("wallets")
-      .update({
-        bonus: parseFloat(newTrading.toFixed(2)),
-      })
-      .eq("user_id", user.id);
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
 
-    setLoading(false);
+    if (walletError) throw walletError;
 
-    if (error) {
-      setMessage("❌ Error processing transfer: " + error.message);
-    } else {
-      setMessage(`✅ Successfully transferred $${transferAmount.toFixed(2)} from ${fromAccount} to ${toAccount}!`);
-      setAmount("");
-      fetchBalances(); 
+    const currentBalance =
+      Number(walletData?.balance || 0);
+
+    const currentBonus =
+      Number(walletData?.bonus || 0);
+
+    const currentTrade =
+      Number(walletData?.trading_balance || 0);
+
+
+    // ==========================================
+    // EXCHANGE -> TRADE
+    // ==========================================
+    if (
+      fromAccount === "Exchange" &&
+      toAccount === "Trade"
+    ) {
+      let remainingAmount = numAmount;
+
+      // Eerst wordt het echte Exchange-saldo gebruikt
+      const balanceUsed = Math.min(
+        currentBalance,
+        remainingAmount
+      );
+
+      remainingAmount -= balanceUsed;
+
+      const newBalance =
+        currentBalance - balanceUsed;
+
+      // Daarna eventueel Bonus gebruiken
+      const bonusUsed = Math.min(
+        currentBonus,
+        remainingAmount
+      );
+
+      remainingAmount -= bonusUsed;
+
+      const newBonus =
+        currentBonus - bonusUsed;
+
+      // Exchange + Bonus samen onvoldoende
+      if (remainingAmount > 0) {
+        throw new Error("Insufficient Exchange balance.");
+      }
+
+      const newTrade =
+        currentTrade + numAmount;
+
+      const { error: updateError } = await supabase
+        .from("wallets")
+        .update({
+          balance: newBalance,
+          bonus: newBonus,
+          trading_balance: newTrade
+        })
+        .eq("user_id", user.id);
+
+      if (updateError) throw updateError;
     }
-  };
 
-  const currentAvailable = fromAccount === "Exchange" ? exchangeBalance : tradingBalance;
 
-  return (
-    <div className="max-w-xl mx-auto bg-[#161d2a] border border-slate-800 p-6 rounded-2xl shadow-xl mt-6">
-      <h2 className="text-2xl font-bold mb-2 text-white">Internal Transfer</h2>
-      <p className="text-slate-400 text-xs mb-6">Move funds instantly between your internal CashPrime accounts.</p>
+    // ==========================================
+    // TRADE -> EXCHANGE
+    // ==========================================
+    if (
+      fromAccount === "Trade" &&
+      toAccount === "Exchange"
+    ) {
+      // Haal bedrag uit Trade
+      const newTrade =
+        currentTrade - numAmount;
 
-      {message && (
-        <div className="bg-slate-800 border border-slate-700 text-sm p-3 rounded-xl mb-4 text-amber-400">
-          {message}
-        </div>
-      )}
+      // Geld komt terug als echt Exchange-saldo
+      const newBalance =
+        currentBalance + numAmount;
 
-      <form onSubmit={handleTransfer} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">From</label>
-            <select 
-              value={fromAccount} 
-              onChange={(e) => setFromAccount(e.target.value)}
-              className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500"
-            >
-              <option value="Exchange">Exchange Account (${exchangeBalance.toFixed(2)})</option>
-              <option value="Trade">Trade Account (${tradingBalance.toFixed(2)})</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">To</label>
-            <select 
-              value={toAccount} 
-              onChange={(e) => setToAccount(e.target.value)}
-              className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500"
-            >
-              <option value="Trade">Trade Account</option>
-              <option value="Exchange">Exchange Account</option>
-            </select>
-          </div>
-        </div>
+      const { error: updateError } = await supabase
+        .from("wallets")
+        .update({
+          balance: newBalance,
+          trading_balance: newTrade
+        })
+        .eq("user_id", user.id);
 
-        <div>
-          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">Amount ($)</label>
-          <input 
-            type="number" 
-            placeholder="0.00" 
-            value={amount} 
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-blue-500" 
-          />
-          <p className="text-[11px] text-slate-500 mt-1">Available: ${currentAvailable.toFixed(2)}</p>
-        </div>
+      if (updateError) throw updateError;
+    }
 
-        <button 
-          type="submit" 
-          disabled={loading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl transition mt-4 disabled:opacity-50"
+
+    // ==========================================
+    // TRANSACTION OPSLAAN
+    // ==========================================
+    const { error: txError } = await supabase
+      .from("transactions")
+      .insert([
+        {
+          user_id: user.id,
+          type: "Transfer",
+          coin: "USDT",
+          amount: numAmount,
+          status: "Completed",
+          description:
+            `Transferred $${numAmount} from ${fromAccount} to ${toAccount}`,
+          created_at: new Date().toISOString()
+        }
+      ]);
+
+    if (txError) throw txError;
+
+
+    setMessage({
+      text: `Successfully transferred $${numAmount}`,
+      type: "success"
+    });
+
+    setAmount("");
+
+    if (refreshDashboard) {
+      await refreshDashboard();
+    }
+
+  } catch (error) {
+    console.error(error);
+
+    setMessage({
+      text: error.message,
+      type: "error"
+    });
+
+  } finally {
+    setLoading(false);
+  }
+};
+
+ return (
+
+<div className="bg-[#161d2a] border border-slate-800 rounded-2xl p-6">
+
+<h2 className="text-2xl font-bold text-white mb-2">
+      Internal Transfer
+    </h2>
+
+    <p className="text-slate-400 text-sm mb-6">
+      Move funds instantly between your internal CashPrime accounts.
+    </p>
+
+    {message.text && (
+      <div
+        className={`p-4 rounded-xl mb-6 text-sm font-semibold ${
+          message.type === "error"
+            ? "bg-red-500/10 text-red-400 border border-red-500/20"
+            : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+        }`}
+      >
+        {message.text}
+      </div>
+    )}
+
+    <form onSubmit={handleTransfer} className="space-y-6">
+
+      <div>
+        <label className="block text-xs uppercase font-bold text-slate-400 mb-2">
+          From
+        </label>
+
+        <select
+          value={fromAccount}
+          onChange={(e) => {
+            setFromAccount(e.target.value);
+            setToAccount(
+              e.target.value === "Exchange"
+                ? "Trade"
+                : "Exchange"
+            );
+          }}
+          className="w-full bg-[#0b0e14] border border-slate-700 rounded-xl px-4 py-3 text-white font-bold"
         >
-          {loading ? "Processing..." : "Confirm Transfer"}
-        </button>
-      </form>
-    </div>
-  );
+          <option value="Exchange">
+            Exchange Account (${exchangeBalance.toFixed(2)})
+          </option>
+
+          <option value="Trade">
+            Trade Account (${tradeBalance.toFixed(2)})
+          </option>
+
+        </select>
+      </div>
+
+
+      <div>
+        <label className="block text-xs uppercase font-bold text-slate-400 mb-2">
+          To
+        </label>
+
+        <input
+          value={toAccount}
+          readOnly
+          className="w-full bg-[#0b0e14] border border-slate-700 rounded-xl px-4 py-3 text-white font-bold"
+        />
+      </div>
+
+
+      <div>
+        <label className="block text-xs uppercase font-bold text-slate-400 mb-2">
+          Amount (USD)
+        </label>
+
+        <input
+          type="number"
+          step="any"
+          value={amount}
+          onChange={(e)=>setAmount(e.target.value)}
+          placeholder="0.00"
+          className="w-full bg-[#0b0e14] border border-slate-700 rounded-xl px-4 py-3 text-white text-lg font-semibold"
+        />
+
+        <p className="text-xs text-slate-400 mt-2">
+          Available: ${maxAvailable.toFixed(2)}
+        </p>
+      </div>
+
+
+       <button
+    type="submit"
+    disabled={loading}
+    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-4 rounded-xl"
+  >
+    {loading ? "Processing..." : "Confirm Transfer"}
+</button>
+
+</form>
+</div>
+);
+
 }
+
+export default TransferPage;

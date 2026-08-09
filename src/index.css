@@ -17,3 +17,31 @@
   animation: scroll 25s linear infinite;
 
 }
+@import "tailwindcss";
+
+@keyframes scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll {
+  animation: scroll 25s linear infinite;
+}
+
+/* Zorg ervoor dat de pagina altijd kan scrollen en de scrollbalk zichtbaar is */
+html, body {
+  height: 100%;
+  overflow-y: auto;
+  background-color: #0b0e14;
+  color: #ffffff;
+}
+
+/* Voor moderne browsers om een nette scrollbalk te garanderen */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #374151 #0b0e14;
+}

@@ -3,6 +3,8 @@ import { supabase } from "../lib/supabase";
 
 function Trade() {
   const [wallet, setWallet] = useState(null);
+  const [todaysEarnings, setTodaysEarnings] = useState(0);
+  const [totalEarnings, setTotalEarnings] = useState(0);
   const [userProfile, setUserProfile] = useState(null);
   const [signal, setSignal] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -26,7 +28,7 @@ function Trade() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1. Haal profiel
+    // 1. Haal profiel en wallet op
     const { data: profile } = await supabase
       .from("profiles")
       .select("*")
@@ -34,62 +36,91 @@ function Trade() {
       .maybeSingle();
     setUserProfile(profile);
 
-    // 2. Haal wallet (inclusief bonus als trading saldo)
     const { data: walletData } = await supabase
       .from("wallets")
       .select("*")
       .eq("user_id", user.id)
       .maybeSingle();
-    
+
+    const { data: userTrades } = await supabase
+      .from("user_trades")
+      .select("profit_amount, created_at")
+      .eq("user_id", user.id)
+      .eq("status", "Completed");
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const todayTrades = (userTrades || []).filter(trade =>
+      new Date(trade.created_at) >= today
+    );
+
+    const todayEarnings = todayTrades.reduce(
+      (acc, trade) => acc + Number(trade.profit_amount || 0),
+      0
+    );
+
+    const totalEarn = (userTrades || []).reduce(
+      (acc, trade) => acc + Number(trade.profit_amount || 0),
+      0
+    );
+
+    setTodaysEarnings(todayEarnings);
+    setTotalEarnings(totalEarn);
+
     if (walletData) {
       setWallet(walletData);
     }
 
-    // 3. Haal signaal EN controleer of het actief is (is_active)
-    const { data: sigData } = await supabase
-      .from("trading_signals")
-      .select("*")
-      .eq("id", 1)
-      .maybeSingle();
-    
-    // Als is_active false is of niet bestaat, zetten we signal op null zodat het verborgen wordt
-    if (sigData && sigData.is_active === true) {
-      setSignal(sigData);
-    } else {
-      setSignal(null);
-    }
-
-    // 4. Haal trades van vandaag
-    const today = new Date().toISOString().split("T")[0];
-    const { data: tradesToday } = await supabase
-      .from("user_trades")
-      .select("trade_number")
-      .eq("user_id", user.id)
-      .gte("created_at", today);
-
-    if (tradesToday) {
-      setCompletedTrades(tradesToday.map((t) => t.trade_number));
-    }
-
-    // 5. Totale winst
+    // 2. Totale winst ophalen voor de asset valuation
     const { data: allTrades } = await supabase
       .from("user_trades")
       .select("profit_amount")
       .eq("user_id", user.id)
       .eq("status", "Completed");
 
+    let sumProfit = 0;
     if (allTrades) {
-      const sumProfit = allTrades.reduce(
+      sumProfit = allTrades.reduce(
         (acc, item) => acc + (Number(item.profit_amount) || 0),
         0
       );
       setTotalProfit(sumProfit);
     }
+
+    // 4. Haal signaal
+    const { data: sigData } = await supabase
+      .from("trading_signals")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
+    
+    if (sigData && sigData.is_active === true) {
+      setSignal(sigData);
+    } else {
+      setSignal(null);
+    }
+
+    const { data: tradesToday } = await supabase
+      .from("user_trades")
+      .select("trade_number, created_at")
+      .eq("user_id", user.id)
+      .eq("status", "Completed");
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const completedToday = (tradesToday || []).filter(
+      (trade) => new Date(trade.created_at) >= todayStart
+    );
+
+    setCompletedTrades(
+      completedToday.map((t) => t.trade_number)
+    );
   };
 
   useEffect(() => {
     fetchAppData();
-
     const handleFocus = () => fetchAppData();
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
@@ -97,15 +128,13 @@ function Trade() {
 
   const isTradeUnlocked = (tradeNum) => {
     const schedule = scheduleTimes[tradeNum];
-    if (!schedule) return true; // Als er geen schema voor is, standaard open
+    if (!schedule) return true;
 
     const now = currentTime;
     const targetTime = new Date(now);
     targetTime.setHours(schedule.hour, schedule.minute, 0, 0);
 
-    // 10 minuten voor de geplande tijd
     const openingTime = new Date(targetTime.getTime() - 10 * 60 * 1000);
-    // 25 minuten na de geplande tijd (daarna sluit hij weer)
     const closingTime = new Date(targetTime.getTime() + 25 * 60 * 1000);
 
     return now >= openingTime && now <= closingTime;
@@ -126,9 +155,7 @@ function Trade() {
     }
 
     const activeProfitPct = parseFloat(signal.profit_percentage) || 2.0; 
-    
-    const currentTradingBalance = Number(wallet.bonus || 0);
-    const currentTotalBalance = Number(wallet.balance || 0);
+    const currentTradingBalance = Number(wallet.trading_balance || 0);
 
     if (currentTradingBalance <= 0) {
       alert("⚠️ Your trade account balance is $0.00. Please transfer funds from your Exchange account first.");
@@ -138,8 +165,6 @@ function Trade() {
 
     const profitAmount = currentTradingBalance * (activeProfitPct / 100);
     const newTradingBalance = currentTradingBalance + profitAmount;
-    const newTotalBalance = currentTotalBalance + profitAmount;
-    const newTodaysEarnings = Number(wallet.todays_earnings || 0) + profitAmount;
 
     const { error: tradeErr } = await supabase.from("user_trades").insert([
       {
@@ -159,10 +184,8 @@ function Trade() {
     }
 
     const updatePayload = {
-      balance: parseFloat(newTotalBalance.toFixed(2)),
-      bonus: parseFloat(newTradingBalance.toFixed(2)),
-      todays_earnings: parseFloat(newTodaysEarnings.toFixed(2)),
-    };
+  trading_balance: parseFloat(newTradingBalance.toFixed(2)),
+};
 
     const { error: walletErr } = await supabase
       .from("wallets")
@@ -181,38 +204,31 @@ function Trade() {
 
   const maxTrades = userProfile?.max_daily_trades || 2;
   const availableTradeNumbers = Array.from({ length: maxTrades }, (_, i) => i + 1);
-
-  const totalValuation = Number(wallet?.balance || 0);
-  const tradingBal = Number(wallet?.bonus || 0);
-  const exchangeBal = Math.max(0, totalValuation - tradingBal);
+  const tradingBal = Number(wallet?.trading_balance || 0);
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <div className="flex justify-between items-center pb-4 border-b border-gray-800">
-        <div>
-          <h1 className="text-2xl font-bold text-white">
-            Welcome back, {userProfile?.name || "Trader"}!
-          </h1>
-          <p className="text-xs text-gray-400 mt-1">Trading & Earnings Overview</p>
-        </div>
-        <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full font-semibold">
-          Live Account
-        </span>
+  <div className="max-w-5xl mx-auto space-y-6">
+
+    <div className="flex justify-between items-center pb-4 border-b border-gray-800">
+      <div>
+        <h1 className="text-2xl font-bold text-white">
+          Welcome back, {userProfile?.name || "Trader"}!
+        </h1>
+        <p className="text-xs text-gray-400 mt-1">
+          Trading & Earnings Overview
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
-          <p className="text-xs text-gray-400 font-semibold uppercase">Asset Valuation</p>
-          <h2 className="text-2xl font-black text-white mt-2">
-            ${totalValuation.toFixed(2)}
-          </h2>
-          <p className="text-xs text-emerald-400 mt-2 font-medium">✓ Base capital + earnings</p>
-        </div>
+      <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-3 py-1 rounded-full">
+        Live Account
+      </span>
+    </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
           <p className="text-xs text-gray-400 font-semibold uppercase">Trading Balance</p>
           <h2 className="text-2xl font-black text-amber-400 mt-2">
-            ${tradingBal.toFixed(2)}
+            ${tradingBal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </h2>
           <p className="text-xs text-gray-400 mt-2">Active funds in trade</p>
         </div>
@@ -220,7 +236,7 @@ function Trade() {
         <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
           <p className="text-xs text-gray-400 font-semibold uppercase">Today's Earnings</p>
           <h2 className="text-2xl font-black text-emerald-400 mt-2">
-            +${wallet?.todays_earnings ? Number(wallet.todays_earnings).toFixed(2) : "0.00"}
+            +${Number(todaysEarnings).toFixed(2)}
           </h2>
           <p className="text-xs text-gray-400 mt-2">Generated today</p>
         </div>
@@ -228,13 +244,12 @@ function Trade() {
         <div className="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
           <p className="text-xs text-gray-400 font-semibold uppercase">Total Earnings</p>
           <h2 className="text-2xl font-black text-amber-400 mt-2">
-            +${totalProfit.toFixed(2)}
+            +${Number(totalEarnings).toFixed(2)}
           </h2>
           <p className="text-xs text-gray-400 mt-2">Cumulative yield</p>
         </div>
       </div>
 
-      {/* ACTIEF SIGNAAL OF MELDING DAT HET UIT STAAT */}
       {signal ? (
         <div className="bg-gray-900/50 p-4 rounded-xl border border-gray-800 flex justify-between items-center text-sm">
           <div>

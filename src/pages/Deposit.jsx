@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function Deposit() {
@@ -10,24 +10,46 @@ export default function Deposit() {
 
   // Wallet adressen per cryptomunt
   const walletAddresses = {
-    USDT: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
-    BTC: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
-    ETH: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
+    USDT: "TJhEwTziQLTo834C3CBbHpiVEb5RSCYJNC",
+    BTC: "12vr23LBGzPopmkeHngLhEJmgArV91wxi8",
+    ETH: "0xb92Fa3CBE7F96a4a212196C1a6D0163c1157ac07"
   };
 
-  const currentAddress = walletAddresses[coin] || walletAddresses.USDT;
+  // Netwerk per cryptomunt
+  const coinNetworks = {
+    USDT: "TRC20",
+    BTC: "Bitcoin",
+    ETH: "ERC20"
+  };
 
-  // Genereer dynamische QR code URL gebaseerd op het gekozen adres
-  const qrCodeUrl = `https://quickchart.io/qr?text=${encodeURIComponent(currentAddress)}&size=200&margin=2`;
+  const currentAddress =
+    walletAddresses[coin] || walletAddresses.USDT;
+
+  // Genereer dynamische QR-code op basis van het huidige adres
+  const qrCodeUrl =
+    `https://quickchart.io/qr?text=${encodeURIComponent(currentAddress)}&size=200&margin=2`;
+
+  // Zorg dat het netwerk automatisch meeverandert met de gekozen coin
+  useEffect(() => {
+    setNetwork(coinNetworks[coin]);
+  }, [coin]);
 
   const handleDeposit = async (e) => {
     e.preventDefault();
-    if (!amount || amount <= 0) return;
+
+    const numAmount = parseFloat(amount);
+
+    if (!numAmount || numAmount <= 0) {
+      setMessage("Please enter a valid amount.");
+      return;
+    }
 
     setLoading(true);
     setMessage("");
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
 
     if (!user) {
       setMessage("User not authenticated.");
@@ -35,52 +57,82 @@ export default function Deposit() {
       return;
     }
 
-    const { error } = await supabase.from("deposits").insert([
-      {
-        user_id: user.id,
-        coin: coin,
-        network: network,
-        amount: parseFloat(amount),
-        status: "Pending"
-      }
-    ]);
+    // Voeg de deposit toe aan de deposits tabel
+    const { error: depositError } = await supabase
+      .from("deposits")
+      .insert([
+        {
+          user_id: user.id,
+          coin: coin,
+          network: network,
+          amount: numAmount,
+          status: "Pending"
+        }
+      ]);
+
+    if (depositError) {
+      setMessage(
+        "Error submitting recharge: " + depositError.message
+      );
+      setLoading(false);
+      return;
+    }
 
     setLoading(false);
-
-    if (error) {
-      setMessage("Error submitting recharge: " + error.message);
-    } else {
-      setMessage("Recharge request submitted successfully! Pending admin approval.");
-      setAmount("");
-    }
+    setMessage(
+      "Recharge request submitted successfully! Waiting for admin approval."
+    );
+    setAmount("");
   };
 
   return (
-    <div className="max-w-xl mx-auto bg-[#161d2a] border border-slate-800 p-6 rounded-2xl shadow-xl mt-6">
-      <h2 className="text-2xl font-bold mb-2">Recharge / Deposit</h2>
-      <p className="text-slate-400 text-xs mb-6">Select your preferred cryptocurrency and scan the QR code or copy the address to deposit funds.</p>
+    <div>
+      <h1 className="text-2xl font-bold text-white mb-2">
+        Recharge / Deposit
+      </h1>
+
+      <p className="text-sm text-slate-400 mb-6">
+        Select your preferred cryptocurrency and scan the QR code
+        or copy the address to deposit funds.
+      </p>
 
       {message && (
-        <div className={`p-3 rounded-xl text-sm mb-4 border ${message.includes("Error") ? "bg-rose-500/10 border-rose-500/20 text-rose-400" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"}`}>
+        <div
+          className={`p-3 rounded-xl text-sm mb-4 border ${
+            message.includes("Error") ||
+            message.includes("valid") ||
+            message.includes("authenticated")
+              ? "bg-rose-500/10 border-rose-500/20 text-rose-400"
+              : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+          }`}
+        >
           {message}
         </div>
       )}
 
-      {/* QR CODE WEERGAVE */}
+      {/* QR CODE */}
       <div className="flex flex-col items-center justify-center bg-[#0b0e14] border border-slate-800 rounded-2xl p-4 mb-6">
         <div className="bg-white p-3 rounded-xl shadow-md mb-2">
-          <img 
-            src={qrCodeUrl} 
-            alt={`QR Code for ${coin}`} 
+          <img
+            src={qrCodeUrl}
+            alt={`QR Code for ${coin}`}
             className="w-40 h-40 object-contain"
           />
         </div>
-        <p className="text-xs text-slate-400">Scan QR Code to pay {coin}</p>
+
+        <p className="text-xs text-slate-400">
+          Scan QR Code to deposit {coin}
+        </p>
       </div>
 
       <form onSubmit={handleDeposit} className="space-y-4">
+
+        {/* ASSET */}
         <div>
-          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">Select Asset</label>
+          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">
+            Select Asset
+          </label>
+
           <select
             value={coin}
             onChange={(e) => setCoin(e.target.value)}
@@ -92,30 +144,38 @@ export default function Deposit() {
           </select>
         </div>
 
+        {/* NETWORK */}
         <div>
-          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">Network</label>
-          <select
-            value={network}
-            onChange={(e) => setNetwork(e.target.value)}
-            className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-500 text-white"
-          >
-            <option value="TRC20">TRC20 (Tron Network)</option>
-            <option value="ERC20">ERC20 (Ethereum Network)</option>
-            <option value="BEP20">BEP20 (BNB Smart Chain)</option>
-          </select>
-        </div>
+          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">
+            Network
+          </label>
 
-        <div>
-          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">Deposit Address</label>
-          <div className="bg-[#0b0e14] border border-slate-800 rounded-xl p-3 text-xs font-mono text-amber-400 break-all select-all flex justify-between items-center">
-            <span>{currentAddress}</span>
+          <div className="w-full bg-[#0b0e14] border border-slate-800 rounded-xl px-4 py-3 text-sm text-white">
+            {network}
           </div>
         </div>
 
+        {/* DEPOSIT ADDRESS */}
         <div>
-          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">Amount ($)</label>
+          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">
+            Deposit Address
+          </label>
+
+          <div className="bg-[#0b0e14] border border-slate-800 rounded-xl p-3 text-xs font-mono text-amber-400 break-all select-all">
+            {currentAddress}
+          </div>
+        </div>
+
+        {/* AMOUNT */}
+        <div>
+          <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider block mb-1">
+            Amount ($)
+          </label>
+
           <input
             type="number"
+            step="any"
+            min="0"
             placeholder="0.00"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -124,6 +184,7 @@ export default function Deposit() {
           />
         </div>
 
+        {/* SUBMIT */}
         <button
           type="submit"
           disabled={loading}

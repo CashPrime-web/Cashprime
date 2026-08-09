@@ -14,27 +14,21 @@ import Wallet from "./pages/Wallet";
 import Withdraw from "./pages/Withdraw";
 import Deposit from "./pages/Deposit";
 import Trade from "./pages/Trade";
-import Transfer from "./pages/Transfer";
+import TransferPage from "./pages/Transfer";
 import LogoutButton from "./components/LogoutButton";
 import MarketOverview from "./components/MarketOverview";
-
-const COIN_RATES = {
-  USDT: 1,
-  BTC: 65000,
-  ETH: 35000,
-};
 
 const CoinLogo = ({ symbol }) => {
   const s = (symbol || "").toUpperCase();
   let logoUrl = "";
 
   if (s === "BTC") {
-    logoUrl = "https://assets.coingecko.com/coins/images/1/large/bitcoin.png";
-  } else if (s === "ETH") {
-    logoUrl = "https://assets.coingecko.com/coins/images/279/large/ethereum.png";
-  } else {
-    logoUrl = "https://assets.coingecko.com/coins/images/325/large/Tether.png";
-  }
+  logoUrl = "https://assets.coingecko.com/coins/images/1/large/bitcoin.png";
+} else if (s === "ETH") {
+  logoUrl = "https://assets.coingecko.com/coins/images/279/large/ethereum.png";
+} else {
+  logoUrl = "https://assets.coingecko.com/coins/images/325/large/Tether.png";
+}
 
   return (
     <div className="w-10 h-10 rounded-full bg-[#1e2738] border border-slate-700 flex items-center justify-center overflow-hidden p-1 shadow-md">
@@ -43,23 +37,61 @@ const CoinLogo = ({ symbol }) => {
   );
 };
 
-function ExchangePage({ refreshDashboard, assets, walletBalance }) {
+
+function ExchangePage({ refreshDashboard, assets, liveRates }) {
   const [fromCoin, setFromCoin] = useState("USDT");
   const [toCoin, setToCoin] = useState("BTC");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ text: "", type: "" });
+  const [walletData, setWalletData] = useState(null);
+  useEffect(() => {
+  const loadWallet = async () => {
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
 
-  const currentAssetRow = assets.find(a => (a.coin || "").toUpperCase() === fromCoin.toUpperCase());
-  const availableBalance = currentAssetRow 
-    ? Number(currentAssetRow.available || currentAssetRow.balance || 0)
-    : (fromCoin === "USDT" ? walletBalance : 0);
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from("wallets")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Failed to load wallet:", error);
+      return;
+    }
+
+    setWalletData(data);
+  };
+
+  loadWallet();
+}, []);
+
+ const currentAssetRow = assets.find(
+  a => (a.coin || "").toUpperCase() === fromCoin.toUpperCase()
+);
+
+const availableBalance =
+  fromCoin === "USDT"
+    ? Number(walletData?.balance || 0) +
+      Number(walletData?.bonus || 0)
+    : currentAssetRow
+      ? Number(
+          currentAssetRow.available ||
+          currentAssetRow.balance ||
+          0
+        )
+      : 0;
+
 
   const calculateConversion = () => {
     if (!amount || isNaN(amount)) return "0.00";
     const val = parseFloat(amount);
-    const fromRate = COIN_RATES[fromCoin] || 1;
-    const toRate = COIN_RATES[toCoin] || 1;
+    const fromRate = liveRates[fromCoin] || 1;
+    const toRate = liveRates[toCoin] || 1;
     const result = (val * fromRate) / toRate;
     return result.toFixed(6);
   };
@@ -74,7 +106,7 @@ function ExchangePage({ refreshDashboard, assets, walletBalance }) {
     }
 
     if (numAmount > availableBalance) {
-      setMessage({ text: `Insufficient ${fromCoin} balance. Available: ${availableBalance.toFixed(2)} ${fromCoin}`, type: "error" });
+      setMessage({ text: `Insufficient ${fromCoin} balance. Available: ${availableBalance.toFixed(6)} ${fromCoin}`, type: "error" });
       return;
     }
 
@@ -83,46 +115,157 @@ function ExchangePage({ refreshDashboard, assets, walletBalance }) {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
+
+if (!user) throw new Error("User not authenticated");
+
+
+const walletBalance =
+  Number(walletData?.balance || 0);
+
+const walletBonus =
+  Number(walletData?.bonus || 0);
+
+const exchangeAvailable =
+  walletBalance + walletBonus;
 
       const convertedValue = parseFloat(calculateConversion());
 
-      // Helper functie om asset in te lezen of aan te maken in Supabase
-      const updateOrCreateAsset = async (coinSymbol, amountChange, isAdd) => {
-        const { data: existing } = await supabase
+      const updateAssetBalance = async (coinSymbol, amountChange, isAdd) => {
+        const targetCoin = coinSymbol.toUpperCase();
+        
+        const { data: existingList, error: fetchErr } = await supabase
           .from("user_assets")
           .select("*")
-          .eq("user_id", user.id)
-          .eq("coin", coinSymbol)
-          .maybeSingle();
+          .eq("user_id", user.id);
+
+        if (fetchErr) throw fetchErr;
+
+        const existing = existingList?.find(a => (a.coin || "").toUpperCase() === targetCoin);
 
         if (existing) {
           const currentBal = Number(existing.balance || 0);
-          const currentAvail = Number(existing.available || 0);
+          const currentAvail = Number(existing.available || existing.balance || 0);
+          
           const newBal = isAdd ? currentBal + amountChange : Math.max(0, currentBal - amountChange);
           const newAvail = isAdd ? currentAvail + amountChange : Math.max(0, currentAvail - amountChange);
 
-          await supabase
+          const { error: updateErr } = await supabase
             .from("user_assets")
             .update({ balance: newBal, available: newAvail })
             .eq("id", existing.id);
+
+          if (updateErr) throw updateErr;
         } else if (isAdd) {
-          await supabase.from("user_assets").insert([{
+          const { error: insertErr } = await supabase.from("user_assets").insert([{
             user_id: user.id,
-            coin: coinSymbol,
+            coin: targetCoin,
             balance: amountChange,
             available: amountChange,
             frozen: 0
           }]);
+          if (insertErr) throw insertErr;
         }
       };
 
-      // Verminder fromCoin
-      await updateOrCreateAsset(fromCoin, numAmount, false);
-      // Verhoog toCoin
-      await updateOrCreateAsset(toCoin, convertedValue, true);
+ if (fromCoin !== "USDT") {
+  await updateAssetBalance(
+    fromCoin,
+    numAmount,
+    false
+  );
+}
 
-      // Transactie loggen
+if (toCoin !== "USDT") {
+  await updateAssetBalance(
+    toCoin,
+    convertedValue,
+    true
+  );
+}
+
+
+// USDT -> Crypto
+if (fromCoin === "USDT") {
+  let remainingAmount = numAmount;
+
+  const balanceUsed = Math.min(
+    walletBalance,
+    remainingAmount
+  );
+
+  remainingAmount -= balanceUsed;
+
+  const newBalance =
+    walletBalance - balanceUsed;
+
+  const bonusUsed = Math.min(
+    walletBonus,
+    remainingAmount
+  );
+
+  remainingAmount -= bonusUsed;
+
+  const newBonus =
+    walletBonus - bonusUsed;
+
+  if (remainingAmount > 0) {
+    throw new Error("Insufficient Exchange balance.");
+  }
+
+  const { error } = await supabase
+    .from("wallets")
+    .update({
+      balance: newBalance,
+      bonus: newBonus
+    })
+    .eq("user_id", user.id);
+
+  if (error) throw error;
+
+  const newExchangeBalance =
+    newBalance + newBonus;
+
+  const { error: assetError } = await supabase
+    .from("user_assets")
+    .update({
+      balance: newExchangeBalance,
+      available: newExchangeBalance
+    })
+    .eq("user_id", user.id)
+    .eq("coin", "USDT");
+
+  if (assetError) throw assetError;
+}
+
+
+// Crypto -> USDT
+if (toCoin === "USDT") {
+  const newBalance =
+    walletBalance + convertedValue;
+
+  const { error } = await supabase
+    .from("wallets")
+    .update({
+      balance: newBalance
+    })
+    .eq("user_id", user.id);
+
+  if (error) throw error;
+
+  const newExchangeBalance =
+    newBalance + walletBonus;
+
+  const { error: assetError } = await supabase
+    .from("user_assets")
+    .update({
+      balance: newExchangeBalance,
+      available: newExchangeBalance
+    })
+    .eq("user_id", user.id)
+    .eq("coin", "USDT");
+
+  if (assetError) throw assetError;
+}
       await supabase.from("transactions").insert([
         {
           user_id: user.id,
@@ -131,7 +274,7 @@ function ExchangePage({ refreshDashboard, assets, walletBalance }) {
           amount: numAmount,
           status: "Completed",
           network: `Received ${convertedValue} ${toCoin}`,
-          description: `Exchanged ${numAmount} ${fromCoin} to ${convertedValue} ${toCoin}`,
+          description: `Exchanged ${numAmount} ${fromCoin} to ${convertedValue} ${toCoin} at live rate`,
           created_at: new Date().toISOString()
         }
       ]);
@@ -152,7 +295,7 @@ function ExchangePage({ refreshDashboard, assets, walletBalance }) {
   return (
     <div className="max-w-2xl mx-auto bg-[#161d2a] border border-slate-800 rounded-2xl p-6 md:p-8 shadow-2xl">
       <h2 className="text-2xl font-black mb-2 text-white">Crypto & Asset Exchange</h2>
-      <p className="text-slate-400 text-sm mb-6">Instantly swap your assets at live market rates.</p>
+      <p className="text-slate-400 text-sm mb-6">Instantly swap your assets at real-time live market rates.</p>
 
       {message.text && (
         <div className={`p-4 rounded-xl mb-6 text-sm font-semibold ${message.type === "error" ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"}`}>
@@ -202,7 +345,7 @@ function ExchangePage({ refreshDashboard, assets, walletBalance }) {
         </div>
 
         <div>
-          <label className="block text-xs uppercase font-bold text-slate-400 mb-2">To (Receive - Estimated)</label>
+          <label className="block text-xs uppercase font-bold text-slate-400 mb-2">To (Receive - Live Estimated)</label>
           <div className="flex gap-3">
             <input
               type="text"
@@ -234,6 +377,234 @@ function ExchangePage({ refreshDashboard, assets, walletBalance }) {
   );
 }
 
+function WithdrawPage({ assets, refreshDashboard }) {
+  const [walletData, setWalletData] = useState(null);
+  const [selectedAsset, setSelectedAsset] = useState("USDT");
+  const [network, setNetwork] = useState("TRC20");
+  const [walletAddress, setWalletAddress] = useState("");
+  const [amount, setAmount] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState({ text: "", type: "" });
+
+  useEffect(() => {
+    const loadWallet = async () => {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("wallets")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Failed to load wallet:", error);
+        return;
+      }
+
+      setWalletData(data);
+    };
+
+    loadWallet();
+  }, []);
+
+  const currentAssetRow = assets.find(
+    a =>
+      (a.coin || "").toUpperCase() ===
+      selectedAsset.toUpperCase()
+  );
+
+  const availableBalance =
+    selectedAsset === "USDT"
+      ? Number(walletData?.balance || 0) +
+        Number(walletData?.bonus || 0)
+      : currentAssetRow
+        ? Number(
+            currentAssetRow.available ||
+            currentAssetRow.balance ||
+            0
+          )
+        : 0;
+
+  const numAmount = parseFloat(amount) || 0;
+
+  const fee = numAmount * 0.10;
+
+  const youReceive = Math.max(
+    0,
+    numAmount - fee
+  );
+const handleWithdraw = async (e) => {
+  e.preventDefault();
+
+  if (numAmount <= 0) {
+    setMessage({
+      text: "Please enter a valid withdrawal amount.",
+      type: "error"
+    });
+    return;
+  }
+
+  if (!walletAddress.trim()) {
+    setMessage({
+      text: "Please enter a valid destination wallet address.",
+      type: "error"
+    });
+    return;
+  }
+
+  if (numAmount > availableBalance) {
+    setMessage({
+      text: `Insufficient ${selectedAsset} balance for this withdrawal.`,
+      type: "error"
+    });
+    return;
+  }
+
+  setLoading(true);
+  setMessage({ text: "", type: "" });
+
+  try {
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
+
+    const { error } = await supabase
+      .from("withdrawals")
+      .insert([
+        {
+          user_id: user.id,
+          coin: selectedAsset,
+          network: network,
+          wallet_address: walletAddress,
+          amount: numAmount,
+          fee: fee,
+          receive_amount: youReceive,
+          status: "pending"
+        }
+      ]);
+
+    if (error) throw error;
+
+    setMessage({
+      text: "Withdrawal request submitted successfully! Pending approval.",
+      type: "success"
+    });
+
+    setAmount("");
+    setWalletAddress("");
+
+    if (refreshDashboard) {
+      await refreshDashboard();
+    }
+
+  } catch (err) {
+    console.error("Withdrawal error:", err);
+
+    setMessage({
+      text: err.message || "Failed to process withdrawal.",
+      type: "error"
+    });
+
+  } finally {
+    setLoading(false);
+  }
+};
+  return (
+    <div className="max-w-2xl mx-auto bg-[#161d2a] border border-slate-800 rounded-2xl p-6 md:p-8 shadow-2xl">
+      <h2 className="text-2xl font-black mb-2 text-white">Withdraw Funds</h2>
+      <p className="text-slate-400 text-sm mb-6">Withdraw your digital assets safely to an external wallet.</p>
+
+      {message.text && (
+        <div className={`p-4 rounded-xl mb-6 text-sm font-semibold ${message.type === "error" ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"}`}>
+          {message.text}
+        </div>
+      )}
+
+      <form onSubmit={handleWithdraw} className="space-y-6">
+        <div>
+          <label className="block text-xs uppercase font-bold text-slate-400 mb-2">Select Asset</label>
+          <select
+            value={selectedAsset}
+            onChange={(e) => setSelectedAsset(e.target.value)}
+            className="w-full bg-[#0b0e14] border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none font-bold"
+          >
+            {assets.map((a, idx) => (
+              <option key={idx} value={a.coin || "USDT"}>{(a.coin || "USDT").toUpperCase()}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs uppercase font-bold text-slate-400 mb-2">Network</label>
+          <select
+            value={network}
+            onChange={(e) => setNetwork(e.target.value)}
+            className="w-full bg-[#0b0e14] border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none font-bold"
+          >
+            <option value="TRC20">TRC20</option>
+            <option value="ERC20">ERC20</option>
+            <option value="BTC Network">BTC Network</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs uppercase font-bold text-slate-400 mb-2">Withdrawal Address</label>
+          <input
+  type="text"
+  placeholder="Enter wallet address"
+  value={walletAddress}
+  onChange={(e) => setWalletAddress(e.target.value)}
+  className="w-full bg-[#0b0e14] border border-slate-700 rounded-xl px-4 py-3 text-white"
+/>
+        </div>
+
+        <div>
+          <label className="block text-xs uppercase font-bold text-slate-400 mb-2">Amount</label>
+          <input
+            type="number"
+            step="any"
+            placeholder="Enter amount"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="w-full bg-[#0b0e14] border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none font-semibold text-lg"
+          />
+        </div>
+
+        <div className="bg-[#0b0e14]/60 border border-slate-800/80 p-4 rounded-xl space-y-2 text-sm">
+          <div className="flex justify-between text-slate-400">
+            <span>Available Balance:</span>
+            <span className="font-bold text-white">{availableBalance.toFixed(6)} {selectedAsset}</span>
+          </div>
+          <div className="flex justify-between text-slate-400">
+            <span>Network Fee (10%):</span>
+            <span className="font-bold text-amber-400">{fee.toFixed(6)} {selectedAsset}</span>
+          </div>
+          <div className="flex justify-between text-slate-300 pt-2 border-t border-slate-800 font-bold text-base">
+            <span>You Receive:</span>
+            <span className="text-emerald-400">{youReceive.toFixed(6)} {selectedAsset}</span>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-600/20 hover:opacity-90 transition disabled:opacity-50 text-base"
+        >
+          {loading ? "Submitting Request..." : "Withdraw Funds"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function Layout({ children }) {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -246,7 +617,7 @@ function Layout({ children }) {
     <div className="min-h-screen bg-[#0b0e14] text-white flex flex-col md:flex-row overflow-x-hidden font-sans">
       <aside
         className={`
-          fixed md:static top-0 left-0 h-screen w-64 bg-[#111622] border-r border-slate-800/80 p-6 shrink-0 flex flex-col justify-between transform transition-transform duration-300 z-50
+          fixed md:static top-0 left-0 min-h-screen w-64 bg-[#111622] border-r border-slate-800/80 p-6 shrink-0 flex flex-col justify-between transform transition-transform duration-300 z-50
           ${menuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
         `}
       >
@@ -281,7 +652,7 @@ function Layout({ children }) {
         </div>
       </aside>
 
-      <main className="flex-1 w-full min-w-0 p-4 md:p-8 bg-gradient-to-b from-[#0b0e14] to-[#111622]">
+      <main className="flex-1 w-full min-w-0 p-4 md:p-8 bg-gradient-to-b from-[#0b0e14] to-[#111622] overflow-y-auto">
         <button onClick={() => setMenuOpen(true)} className="md:hidden bg-[#161d2a] text-white p-3 rounded-lg mb-4 border border-slate-800">☰ Menu</button>
         {children}
       </main>
@@ -292,45 +663,100 @@ function Layout({ children }) {
 function App() {
   const [wallet, setWallet] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [todaysEarnings, setTodaysEarnings] = useState("0.00");
+  const [todaysEarnings, setTodaysEarnings] = useState(0);
+  const [totalEarnings, setTotalEarnings] = useState(0);
   const [assets, setAssets] = useState([]);
 
-  // Balansen gebaseerd op Transfer.js logica
   const [totalValuation, setTotalValuation] = useState(0);
   const [exchangeBalance, setExchangeBalance] = useState(0);
   const [tradeBalance, setTradeBalance] = useState(0);
 
-  const loadDashboard = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+   const [liveRates, setLiveRates] = useState({
+    USDT: 1,
+    BTC: 64694,
+    ETH: 1918.23
+});
+useEffect(() => {
+  const fetchLivePrices = async () => {
+    try {
+      const res = await fetch(
+        "https://api.coingecko.com/api/v3/simple/price?ids=tether,bitcoin,ethereum&vs_currencies=usd"
+      );
 
-    // 1. Haal wallet gegevens op (totaal en trade-saldo / bonus)
-    const { data: walletData } = await supabase
-      .from("wallets")
-      .select("balance, bonus, todays_earnings")
-      .eq("user_id", user.id)
-      .single();
-
-    let currentTotalBal = 0;
-    let currentTradeBal = 0;
-    let currentExchangeBal = 0;
-
-    if (walletData) {
-      setWallet(walletData);
-      if (walletData.todays_earnings !== undefined) {
-        setTodaysEarnings(Number(walletData.todays_earnings).toFixed(2));
+      if (!res.ok) {
+        throw new Error(
+          `Failed to fetch crypto rates: ${res.status}`
+        );
       }
 
-      currentTotalBal = Number(walletData.balance || 0);
-      currentTradeBal = Number(walletData.bonus || 0);
-      currentExchangeBal = Math.max(0, currentTotalBal - currentTradeBal);
+      const data = await res.json();
 
-      setTotalValuation(currentTotalBal);
-      setExchangeBalance(currentExchangeBal);
-      setTradeBalance(currentTradeBal);
+      if (data && data.bitcoin && data.ethereum) {
+        setLiveRates({
+          USDT: 1,
+          BTC: data.bitcoin.usd,
+          ETH: data.ethereum.usd
+        });
+      }
+    } catch (err) {
+      console.error(
+        "Kon live prijzen niet ophalen",
+        err
+      );
+    }
+  };
+
+  // Direct één keer ophalen
+  fetchLivePrices();
+
+  // Daarna iedere 60 seconden
+  const interval = setInterval(
+    fetchLivePrices,
+    60000
+  );
+
+  return () => clearInterval(interval)
+}, []);
+
+const loadDashboard = async () => {
+
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+
+    // 1. Haal de walletgegevens één keer goed op
+    const { data: walletData } = await supabase
+      .from("wallets")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (walletData) {
+      setWallet(walletData); 
     }
 
-    // 2. Haal werkelijke opgeslagen assets op uit user_assets
+   let fetchedTradingBal = Number(walletData?.trading_balance || 0);
+
+setTradeBalance(fetchedTradingBal);
+    // --- HIER OPLOSSEN: Haal de werkelijke winst op uit user_trades ---
+    const { data: userTrades } = await supabase
+      .from("user_trades")
+      .select("profit_amount, created_at")
+      .eq("user_id", user.id)
+console.log("ALL USER TRADES DETAILS:", JSON.stringify(userTrades, null, 2));
+
+
+
+
+    const calculatedEarnings = userTrades 
+      ? userTrades.reduce((acc, t) => acc + (Number(t.profit_amount) || 0), 0) 
+      : 0;
+    // -------------------------------------------------------------
+
+    // 2. Haal de assets op zoals je al deed
     const { data: assetData } = await supabase
       .from("user_assets")
       .select("*")
@@ -338,50 +764,200 @@ function App() {
 
     let formattedAssets = assetData || [];
 
-    // Controleer of de gebruiker reeds assets heeft opgeslagen. 
-    // Zo niet (of als er geen USDT asset record is), vullen we automatisch aan op basis van het exchange-saldo.
     const hasUsdt = formattedAssets.some(a => (a.coin || "").toUpperCase() === "USDT");
     const hasBtc = formattedAssets.some(a => (a.coin || "").toUpperCase() === "BTC");
     const hasEth = formattedAssets.some(a => (a.coin || "").toUpperCase() === "ETH");
 
-    if (!hasUsdt && formattedAssets.length === 0) {
-      // Als er helemaal geen assets zijn, zetten we alles in USDT gelijk aan het exchange-saldo
-      formattedAssets = [
-        { coin: "USDT", available: currentExchangeBal, frozen: 0, balance: currentExchangeBal },
-        { coin: "BTC", available: 0, frozen: 0, balance: 0 },
-        { coin: "ETH", available: 0, frozen: 0, balance: 0 }
-      ];
-    } else {
-      // Zorg dat ontbrekende standaardmunten er ook netjes tussen staan
-      if (!hasUsdt) formattedAssets.push({ coin: "USDT", available: 0, frozen: 0, balance: 0 });
-      if (!hasBtc) formattedAssets.push({ coin: "BTC", available: 0, frozen: 0, balance: 0 });
-      if (!hasEth) formattedAssets.push({ coin: "ETH", available: 0, frozen: 0, balance: 0 });
+
+const usdtAsset = formattedAssets.find(
+  a => (a.coin || "").toUpperCase() === "USDT"
+);
+
+// USDT = Exchange Account
+const currentUsdtBal = Number(
+  walletData?.balance ?? usdtAsset?.balance ?? 0
+);
+
+if (usdtAsset) {
+  usdtAsset.balance = currentUsdtBal;
+  usdtAsset.available = currentUsdtBal;
+}
+
+if (!hasUsdt && formattedAssets.length === 0) {
+  formattedAssets = [
+    { coin: "USDT", available: currentUsdtBal, frozen: 0, balance: currentUsdtBal },
+    { coin: "BTC", available: 0, frozen: 0, balance: 0 },
+    { coin: "ETH", available: 0, frozen: 0, balance: 0 }
+  ];
+} else {
+  if (!hasUsdt) {
+    formattedAssets.push({
+      coin: "USDT",
+      available: currentUsdtBal,
+      frozen: 0,
+      balance: currentUsdtBal
+    });
+  }
+
+  if (!hasBtc) {
+    formattedAssets.push({
+      coin: "BTC",
+      available: 0,
+      frozen: 0,
+      balance: 0
+    });
+  }
+
+  if (!hasEth) {
+    formattedAssets.push({
+      coin: "ETH",
+      available: 0,
+      frozen: 0,
+      balance: 0
+    });
+  }
+}
+
+setAssets(formattedAssets);
+
+
+// --- DIRECTE SYNCHRONISATIE MET DATABASE ---
+const adminBalance = Number(
+  walletData?.balance ?? currentUsdtBal ?? 0
+);
+
+console.log("WALLET DATA:", walletData);
+console.log("USDT ASSET:", usdtAsset);
+console.log("ADMIN BALANCE:", adminBalance);
+
+const adminBonus = Number(walletData?.bonus || 0);
+const currentTradingBal = Number(walletData?.trading_balance || 0);
+
+// Exchange = echte USDT + bonus
+const availableExchangeBalance =
+  adminBalance + adminBonus;
+
+// --- ASSET VALUATION BEREKENING ---
+
+// Bereken de werkelijke waarde van BTC / ETH / andere crypto-assets
+// USDT wordt hier bewust niet meegenomen, omdat USDT al in
+// availableExchangeBalance zit.
+const cryptoValue = formattedAssets.reduce(
+  (total, asset) => {
+
+    const coin = (asset.coin || "").toUpperCase();
+
+    if (coin === "USDT") {
+      return total;
     }
 
-    setAssets(formattedAssets);
+    const amount = Number(asset.balance || 0);
+    const rate = Number(liveRates[coin] || 0);
 
-    // 3. Transacties ophalen
-    const { data: txData } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    return total + (amount * rate);
+  },
+  0
+);
 
-    const { data: deposits } = await supabase.from("deposits").select("*").eq("user_id", user.id);
-    const { data: withdrawals } = await supabase.from("withdrawals").select("*").eq("user_id", user.id);
+console.log("REAL CRYPTO VALUE:", cryptoValue);
 
-    const combinedTx = [
-      ...(txData || []),
-      ...(deposits || []).map(d => ({ ...d, type: 'Deposit', amount: d.amount || d.recharge_amount, status: d.status || 'Completed' })),
-      ...(withdrawals || []).map(w => ({ ...w, type: 'Withdrawal', amount: w.amount, status: w.status || 'Pending' }))
-    ].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+// TOTALE ASSET VALUATION
+const exactTotalValuation =
+  availableExchangeBalance +
+  currentTradingBal +
+  cryptoValue;
 
-    setTransactions(combinedTx);
+console.log("EXACT TOTAL VALUATION:", exactTotalValuation);
+
+setTotalValuation(exactTotalValuation);
+
+// Balansen naar UI
+setExchangeBalance(availableExchangeBalance);
+setTradeBalance(currentTradingBal);
+
+
+// Earnings berekenen
+
+const today = new Date();
+today.setHours(0, 0, 0, 0);
+
+const todayTrades = userTrades?.filter((trade) => {
+  return new Date(trade.created_at) >= today;
+}) || [];
+
+const todayEarnings = todayTrades.reduce(
+  (acc, trade) => acc + (Number(trade.profit_amount) || 0),
+  0
+);
+
+console.log("TODAY TRADES DASHBOARD DETAILS:", JSON.stringify(todayTrades, null, 2));
+console.log("TODAY EARNINGS DASHBOARD:", todayEarnings);
+
+setTodaysEarnings(todayEarnings.toFixed(2));
+setTotalEarnings(calculatedEarnings.toFixed(2));
+
+
+// --- TRANSACTIES OPHALEN ---
+const { data: txData } = await supabase
+  .from("transactions")
+  .select("*")
+  .eq("user_id", user.id)
+  .order("created_at", { ascending: false });
+
+
+console.log("TRANSACTIONS:", txData);
+
+
+const { data: deposits } = await supabase
+  .from("deposits")
+  .select("*")
+  .eq("user_id", user.id);
+
+
+const { data: withdrawals } = await supabase
+  .from("withdrawals")
+  .select("*")
+  .eq("user_id", user.id);
+
+
+
+const combinedTx = [
+  ...(txData || []),
+
+  ...(deposits || []).map(d => ({
+    ...d,
+    type: "Deposit",
+    amount: d.amount || d.recharge_amount,
+    status: d.status || "Completed",
+    created_at: d.created_at || d.date
+  })),
+
+  ...(withdrawals || []).map(w => ({
+    ...w,
+    type: "Withdrawal",
+    amount: w.amount,
+    status: w.status || "Pending",
+    created_at: w.created_at || w.date
+  }))
+
+].sort(
+  (a,b) =>
+  new Date(b.created_at || 0) -
+  new Date(a.created_at || 0)
+);
+
+
+setTransactions(combinedTx);
+
+
+console.log("DEPOSITS:", deposits);
+console.log("WITHDRAWALS:", withdrawals);
+console.log("COMBINED:", combinedTx);
   };
 
-  useEffect(() => {
-    loadDashboard();
-  }, []);
+useEffect(() => {
+loadDashboard();
+}, [liveRates]);
 
   return (
     <BrowserRouter>
@@ -397,25 +973,40 @@ function App() {
               <ExchangePage 
                 refreshDashboard={loadDashboard} 
                 assets={assets} 
-                walletBalance={exchangeBalance} 
+                liveRates={liveRates}
               />
             </ProtectedRoute>
           } />
-          <Route path="/transfer" element={<ProtectedRoute><Transfer /></ProtectedRoute>} />
+          <Route path="/transfer" element={
+            <ProtectedRoute>
+              <TransferPage 
+                exchangeBalance={exchangeBalance}
+                tradeBalance={tradeBalance}
+                refreshDashboard={loadDashboard}
+              />
+            </ProtectedRoute>
+          } />
           <Route path="/verification" element={<ProtectedRoute><Verification /></ProtectedRoute>} />
           <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="/withdraw" element={<ProtectedRoute><Withdraw /></ProtectedRoute>} />
+          <Route path="/withdraw" element={
+            <ProtectedRoute>
+              <WithdrawPage 
+                assets={assets} 
+                refreshDashboard={loadDashboard} 
+              />
+            </ProtectedRoute>
+          } />
           <Route path="/deposit" element={<ProtectedRoute><Deposit /></ProtectedRoute>} />
 
           <Route
             path="/"
             element={
               <ProtectedRoute>
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+               <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                   <div>
                     <h2 className="text-3xl font-extrabold tracking-tight">Welcome to CashPrime</h2>
-                    <p className="text-slate-400 text-xs mt-1">Overview of your assets, market metrics, and recent activities.</p>
+                    <p className="text-slate-400 text-xs mt-1">Overview of your assets, live market metrics, and recent activities.</p>
                   </div>
                   <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-full text-xs font-semibold">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -427,8 +1018,8 @@ function App() {
                   <div className="lg:col-span-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-xl shadow-blue-600/10 relative overflow-hidden flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-start mb-2">
-                        <span className="text-blue-200 text-xs font-semibold tracking-wider uppercase">Asset Valuation</span>
-                        <span className="bg-white/20 backdrop-blur-md px-3 py-0.5 rounded-full text-xs font-bold">USD</span>
+                        <span className="text-blue-200 text-xs font-semibold tracking-wider uppercase">Asset Valuation (Live)</span>
+                        <span className="bg-white/25 backdrop-blur-md px-3 py-0.5 rounded-full text-xs font-bold">USD</span>
                       </div>
 
                       <div className="text-4xl font-black tracking-tight mb-3">
@@ -451,33 +1042,42 @@ function App() {
                         <span className="text-xs font-medium">Recharge</span>
                       </Link>
                       <Link to="/transfer" className="flex flex-col items-center gap-1.5 hover:opacity-80 transition">
-                        <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-lg">⇄</div>
+                        <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                          </svg>
+                        </div>
                         <span className="text-xs font-medium">Transfer</span>
                       </Link>
                       <Link to="/exchange" className="flex flex-col items-center gap-1.5 hover:opacity-80 transition">
-                        <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold text-lg">🔄</div>
+                        <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        </div>
                         <span className="text-xs font-medium">Exchange</span>
                       </Link>
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-4">
-                    <div className="bg-[#161d2a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition">
+  <div className="flex flex-col gap-4">
+                    <div className="bg-[#161d2a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition h-full">
                       <div>
                         <div className="text-[11px] text-slate-400 uppercase font-bold tracking-wider mb-1">My Account / Exchange</div>
                         <div className="text-sm font-semibold text-slate-300">Available Balance</div>
                       </div>
-                      <div className="text-2xl font-bold text-blue-400 mt-3">
+                      <div className="text-2xl font-bold text-blue-400 mt-0.5">
                         ${exchangeBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
+                  
 
                     <div className="bg-[#161d2a] border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition">
                       <div>
                         <div className="text-[11px] text-slate-400 uppercase font-bold tracking-wider mb-1">My Account / Trade</div>
                         <div className="text-sm font-semibold text-slate-300">Available Balance</div>
                       </div>
-                      <div className="text-2xl font-bold text-emerald-400 mt-3">
+                      <div className="text-2xl font-bold text-emerald-400 mt-0.5">
                         ${tradeBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </div>
                     </div>
@@ -485,88 +1085,80 @@ function App() {
                 </div>
 
                 <div className="mb-8">
-                  <h3 className="text-lg font-bold mb-4 text-white">Account Assets</h3>
-                  <div className="grid grid-cols-1 gap-4">
-{assets.map((asset, idx) => {
-  const coinName = (asset.coin || 'USDT').toUpperCase();
-  const rate = COIN_RATES[coinName] || 1;
-  
-  let coinBalance = coinName === "USDT" && Number(asset.balance || 0) === 0 && exchangeBalance > 0 
-    ? exchangeBalance 
+                  <h3 className="text-lg font-bold mb-4 text-white">Account Assets (Real-Time Rates)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {assets.map((asset, idx) => {
+                      const coinName = (asset.coin || 'USDT').toUpperCase();
+                      const rate = liveRates[coinName] || 1;
+                      const coinBalance =
+  coinName === "USDT"
+    ? exchangeBalance
     : Number(asset.balance || 0);
 
-  let coinAvailable = coinName === "USDT" && Number(asset.available || 0) === 0 && exchangeBalance > 0 
-    ? exchangeBalance 
-    : Number(asset.available || asset.balance || 0);
-
-  const coinFrozen = Number(asset.frozen || 0);
-
-  // Wiskundige waarde in USD
-  const usdBalanceValue = coinBalance * rate;
-  const usdAvailableValue = coinAvailable * rate;
-
-  return (
-    <div key={idx} className="bg-[#161d2a] border border-slate-800 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:border-slate-700 transition">
-      <div className="flex items-center gap-3 w-full md:w-56 shrink-0">
-        <CoinLogo symbol={asset.coin} />
-        <div>
-          <h4 className="font-bold text-base text-white">{coinName}</h4>
-          <p className="text-xs text-slate-400">Rate: ${rate.toLocaleString()} / {coinName}</p>
-        </div>
-      </div>
-      
-      {/* Vaste grid kolommen zodat alles kaarsrecht onder elkaar uitlijnt */}
-      <div className="grid grid-cols-3 gap-4 w-full md:w-[600px] text-left md:text-right">
-        <div className="overflow-hidden">
-          <p className="text-[11px] text-slate-400 uppercase font-semibold truncate">Available balance</p>
-          <p className="font-bold text-sm text-white mt-0.5 truncate">
-            {coinAvailable.toFixed(6)} <span className="text-xs font-normal text-slate-400">(${usdAvailableValue.toFixed(2)})</span>
-          </p>
-        </div>
-        <div className="overflow-hidden">
-          <p className="text-[11px] text-slate-400 uppercase font-semibold truncate">Frozen amount</p>
-          <p className="font-bold text-sm text-slate-300 mt-0.5 truncate">{coinFrozen.toFixed(6)}</p>
-        </div>
-        <div className="overflow-hidden">
-          <p className="text-[11px] text-slate-400 uppercase font-semibold truncate">Total Value</p>
-          <p className="font-bold text-sm text-emerald-400 mt-0.5 truncate">
-            ${usdBalanceValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-})}
+const usdValue = coinBalance * rate;
+                      return (
+                        <div key={idx} className="bg-[#161d2a] border border-slate-800 rounded-2xl p-5 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <CoinLogo symbol={coinName} />
+                            <div>
+                              <div className="font-bold text-white text-base">{coinName}</div>
+                              <div className="text-xs text-slate-400">Balance: {coinBalance.toFixed(6)}</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-emerald-400">${usdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                            <div className="text-[10px] text-slate-500">Rate: ${rate.toLocaleString()}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
-                <div className="mb-8">
-                  <MarketOverview />
-                </div>
+                <MarketOverview liveRates={liveRates} />
 
-                <div className="bg-[#161d2a] border border-slate-800 p-6 rounded-2xl shadow-xl">
-                  <h3 className="text-lg font-bold mb-4">Recent Transactions</h3>
+                <div className="bg-[#161d2a] border border-slate-800 rounded-2xl p-6 mt-8 mb-12">
+                  <h3 className="text-lg font-bold mb-4 text-white">Recent Transactions</h3>
                   {transactions.length === 0 ? (
-                    <p className="text-slate-400 text-sm">No transactions available</p>
+                    <p className="text-slate-400 text-sm">No recent transactions found.</p>
                   ) : (
-                    <div className="max-h-72 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                      {transactions.map((tx, idx) => (
-                        <div key={tx.id || idx} className="flex justify-between items-center border-b border-slate-800/80 py-3 last:border-0">
-                          <div>
-                            <p className="font-semibold text-sm capitalize">{tx.type || tx.coin || 'Transaction'}</p>
-                            <p className="text-slate-400 text-xs mt-0.5">{tx.network || tx.description || (tx.created_at ? new Date(tx.created_at).toLocaleDateString() : '')}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-bold text-sm">${Number(tx.amount || 0).toFixed(2)}</p>
-                            <p className={`text-xs font-semibold mt-0.5 ${tx.status === "Approved" || tx.status === "Completed" || tx.status === "Success" ? "text-emerald-400" : "text-amber-400"}`}>
-                              {tx.status || "Completed"}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="max-h-80 overflow-y-auto pr-2">
+                      <table className="w-full text-left text-sm text-slate-300 border-collapse">
+                        <thead className="text-xs uppercase bg-[#0b0e14] text-slate-400 border-b border-slate-800 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-4 py-3 bg-[#0b0e14]">Type</th>
+                            <th className="px-4 py-3 bg-[#0b0e14]">Coin / Details</th>
+                            <th className="px-4 py-3 bg-[#0b0e14]">Amount</th>
+                            <th className="px-4 py-3 bg-[#0b0e14]">Status</th>
+                            <th className="px-4 py-3 bg-[#0b0e14]">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800">
+                          {transactions.map((tx, idx) => (
+                            <tr key={idx} className="hover:bg-slate-800/40 transition">
+                              <td className="px-4 py-3 font-semibold text-white">{tx.type}</td>
+                              <td className="px-4 py-3 text-slate-400">{tx.coin || tx.description || "-"}</td>
+                              <td className="px-4 py-3 font-bold text-white">{tx.amount ? Number(tx.amount).toFixed(2) : "0.00"}</td>
+                              <td className="px-4 py-3">
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                  tx.status === "Completed" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                                  tx.status === "Pending" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                                  "bg-red-500/10 text-red-400 border border-red-500/20"
+                                }`}>
+                                  {tx.status}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-slate-500 text-xs">
+                                {tx.created_at ? new Date(tx.created_at).toLocaleString() : "-"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
+
               </ProtectedRoute>
             }
           />

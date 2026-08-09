@@ -56,7 +56,7 @@ function Login() {
       // Als het account geblokkeerd is (gecorrigeerd naar hoofdletter "Blocked")
       if (profile.status === "Blocked") {
         await supabase.auth.signOut(); // Direct uitloggen
-        setError("Jouw account is geblokkeerd. Neem contact op met de beheerder.");
+        setError("Your account has been blocked. Please contact the administrator.");
         setLoading(false);
         return;
       }
@@ -64,7 +64,7 @@ function Login() {
       // Als het account nog in afwachting (pending) is (gecorrigeerd naar hoofdletter "Pending")
       if (profile.status === "Pending") {
         await supabase.auth.signOut(); // Direct uitloggen
-        setError("Jouw account is nog in afwachting (pending) van goedkeuring door de admin.");
+        setError("Your account is awaiting (Pending) approval by the admin.");
         setLoading(false);
         return;
       }

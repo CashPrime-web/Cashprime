@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
 function Settings() {
@@ -10,7 +11,13 @@ function Settings() {
   const [copied, setCopied] = useState(false);
   const [groupReferralsCount, setGroupReferralsCount] = useState(0);
 
-useEffect(() => {
+  // States voor delete account
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleteError, setDeleteError] = useState(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
     async function fetchUserData() {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -64,6 +71,30 @@ useEffect(() => {
     navigator.clipboard.writeText(referralLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (confirmText !== "DELETE") {
+      setDeleteError("Type exactly 'DELETE' to confirm.");
+      return;
+    }
+
+    setDeleteLoading(true);
+    setDeleteError(null);
+
+    try {
+      const { error: rpcError } = await supabase.rpc('delete_user_account');
+      
+      if (rpcError) throw rpcError;
+
+      await supabase.auth.signOut();
+      navigate("/login");
+    } catch (err) {
+      console.error("Error deleting account:", err);
+      setDeleteError("Could not fully delete the account. Please try again.");
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(referralLink)}`;
@@ -194,6 +225,42 @@ useEffect(() => {
           Save Changes
         </button>
       </form>
+
+      {/* --- DELETE ACCOUNT SECTIE --- */}
+      <div className="bg-gray-800 p-5 rounded-xl mt-6 border border-red-900/50">
+        <h2 className="text-xl font-bold text-red-500 mb-2">Danger Zone: Delete Account</h2>
+        <p className="text-gray-400 text-sm mb-4">
+          Once you delete your account, all your data, wallets, transactions, and admin records will be permanently erased. This cannot be undone.
+        </p>
+
+        {deleteError && (
+          <div className="bg-red-500/10 border border-red-500 text-red-400 p-3 rounded-lg text-sm mb-4">
+            {deleteError}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3">
+          <label className="text-xs text-gray-400">
+            Type <span className="font-bold text-white">DELETE</span> to confirm:
+          </label>
+          <input
+            type="text"
+            placeholder="DELETE"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            className="bg-gray-900 border border-gray-700 rounded px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500"
+          />
+
+          <button
+            type="button"
+            onClick={handleDeleteAccount}
+            disabled={deleteLoading || confirmText !== "DELETE"}
+            className="bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-4 py-2 rounded-lg text-sm transition mt-2 w-full sm:w-auto text-center"
+          >
+            {deleteLoading ? "Permanently deleting..." : "Delete My Account Permanently"}
+          </button>
+        </div>
+      </div>
 
     </div>
   );

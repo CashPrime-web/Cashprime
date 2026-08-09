@@ -55,7 +55,7 @@ function Withdraw() {
     loadData();
   }, []);
 
-const submitWithdraw = async () => {
+  const submitWithdraw = async () => {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -80,19 +80,14 @@ const submitWithdraw = async () => {
       return;
     }
 
-   const fee = withdrawAmount * feePercentage;
-    const receive = withdrawAmount - fee;
-
     const { error } = await supabase
       .from("withdrawals")
       .insert({
         user_id: user.id,
-        amount: receive,             // Dit is nu 900 in plaats van 1000, waardoor de admin direct het uit te betalen bedrag ziet!
-        fee: fee,
-        receive_amount: receive,
+        amount: withdrawAmount,
         coin: coin,
         network: network,
-        wallet_adress: walletAddress,
+        wallet_address: wallet_address, // <-- Hier staat nu exact de juiste kolomnaam
         status: "Pending"
       });
 
@@ -102,7 +97,7 @@ const submitWithdraw = async () => {
       return;
     }
 
-    alert("Withdrawal request submitted");
+    alert("Withdrawal request submitted successfully!");
 
     setAmount("");
     setWalletAddress("");
@@ -119,7 +114,7 @@ const submitWithdraw = async () => {
         Select Asset
       </label>
       <select
-        className="bg-gray-800 p-3 rounded w-full mt-2"
+        className="bg-gray-800 p-3 rounded w-full mt-2 text-white"
         value={coin}
         onChange={(e) => {
           setCoin(e.target.value);
@@ -143,7 +138,7 @@ const submitWithdraw = async () => {
         Network
       </label>
       <select
-        className="bg-gray-800 p-3 rounded w-full mt-2"
+        className="bg-gray-800 p-3 rounded w-full mt-2 text-white"
         value={network}
         onChange={(e) => setNetwork(e.target.value)}
       >
@@ -156,7 +151,7 @@ const submitWithdraw = async () => {
         Withdrawal Address
       </label>
       <input
-        className="bg-gray-800 p-3 rounded w-full mt-2"
+        className="bg-gray-800 p-3 rounded w-full mt-2 text-white"
         placeholder="Enter wallet address"
         value={walletAddress}
         onChange={(e) => setWalletAddress(e.target.value)}
@@ -167,7 +162,7 @@ const submitWithdraw = async () => {
       </label>
       <input
         type="number"
-        className="bg-gray-800 p-3 rounded w-full mt-2"
+        className="bg-gray-800 p-3 rounded w-full mt-2 text-white"
         placeholder="Enter amount"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
@@ -194,7 +189,7 @@ const submitWithdraw = async () => {
 
       <button
         onClick={submitWithdraw}
-        className="mt-6 bg-blue-500 w-full py-3 rounded font-bold hover:bg-blue-600 transition"
+        className="mt-6 bg-blue-500 w-full py-3 rounded font-bold hover:bg-blue-600 transition text-white"
       >
         Withdraw
       </button>
@@ -205,21 +200,19 @@ const submitWithdraw = async () => {
         </h2>
 
         <div className="bg-gray-800 rounded-xl p-5 overflow-x-auto">
-          <table className="w-full text-left">
+          <table className="w-full text-left text-sm">
             <thead className="text-gray-400 border-b border-gray-700">
               <tr>
                 <th className="p-3">Date</th>
                 <th className="p-3">Coin</th>
                 <th className="p-3">Amount</th>
-                <th className="p-3">Fee</th>
-                <th className="p-3">Receive</th>
                 <th className="p-3">Status</th>
               </tr>
             </thead>
             <tbody>
               {withdrawals.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="p-3 text-gray-400 text-center">
+                  <td colSpan="4" className="p-3 text-gray-400 text-center">
                     No withdrawals yet
                   </td>
                 </tr>
@@ -229,9 +222,7 @@ const submitWithdraw = async () => {
                 <tr key={w.id} className="border-b border-gray-700">
                   <td className="p-3">{new Date(w.created_at).toLocaleDateString()}</td>
                   <td className="p-3">{w.coin}</td>
-                  <td className="p-3">{w.amount}</td>
-                  <td className="p-3">{w.fee}</td>
-                  <td className="p-3">{w.receive_amount}</td>
+                  <td className="p-3">${w.amount}</td>
                   <td className="p-3 font-semibold text-amber-400">{w.status}</td>
                 </tr>
               ))}

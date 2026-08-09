@@ -99,7 +99,7 @@ export default function Verification() {
 
       {status === "Approved" ? (
         <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 p-4 rounded-xl text-center font-semibold">
-          Your account is fully verified! 🎉
+          Your account is fully verified! 
         </div>
       ) : status === "Pending" ? (
         <div className="bg-amber-500/10 border border-amber-500/30 text-amber-400 p-4 rounded-xl text-center font-semibold">
