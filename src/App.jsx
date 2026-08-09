@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
 import { supabase } from "./lib/supabase";
-
+import AdminRoute from "./components/AdminRoute";
 import Admin from "./pages/Admin";
 import ProtectedRoute from "./components/ProtectedRoute";
 
@@ -963,7 +963,14 @@ loadDashboard();
     <BrowserRouter>
       <Layout>
         <Routes>
-          <Route path="/admin" element={<Admin />} />
+<Route
+  path="/admin"
+  element={
+    <AdminRoute>
+      <Admin />
+    </AdminRoute>
+  }
+/>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
