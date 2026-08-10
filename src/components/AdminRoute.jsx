@@ -4,78 +4,77 @@ import { supabase } from "../lib/supabase";
 
 
 function AdminRoute({ children }) {
-
+console.log("🔥 ADMIN ROUTE RENDERED");
 
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
 
 
-  useEffect(()=>{
+useEffect(() => {
+  const checkAdmin = async () => {
+    console.log("🔥 ADMIN ROUTE RENDERED");
+    const {
+      data: { user },
+      error: userError
+    } = await supabase.auth.getUser();
+    console.log("🔥 ADMIN ROUTE RENDERED");
 
+    console.log("ADMIN CHECK USER:", user);
+    console.log("ADMIN CHECK USER ERROR:", userError);
 
-    const checkAdmin = async()=>{
-
-
-      const {
-        data:{user}
-      } = await supabase.auth.getUser();
-
-
-
-      if(!user){
-
-        setIsAdmin(false);
-        setLoading(false);
-        return;
-
-      }
-
-
-
-      const {data:profile,error}= await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id",user.id)
-      .single();
-
-
-
-      if(error){
-
-        console.log(error);
-        setIsAdmin(false);
-        setLoading(false);
-        return;
-
-      }
-
-
-
-      if(profile.role === "admin"){
-
-        setIsAdmin(true);
-
-      }else{
-
-        setIsAdmin(false);
-
-      }
-
-
-
+    if (!user) {
+      console.log("ADMIN CHECK: GEEN INGLOGDE USER");
+      setIsAdmin(false);
       setLoading(false);
+      return;
+    }
 
+    console.log("AUTH USER ID:", user.id);
+    console.log("AUTH USER EMAIL:", user.email);
 
-    };
+    const {
+      data: profile,
+      error: profileError
+    } = await supabase
+      .from("profiles")
+      .select("id, email, role")
+      .eq("id", user.id)
+      .maybeSingle();
 
+    console.log("ADMIN PROFILE:", profile);
+    console.log("ADMIN PROFILE ERROR:", profileError);
 
+    if (profileError) {
+      console.log("PROFILE FOUT:", profileError);
+      setIsAdmin(false);
+      setLoading(false);
+      return;
+    }
 
-    checkAdmin();
+    if (!profile) {
+      console.log("GEEN PROFILE GEVONDEN VOOR DEZE USER");
+      setIsAdmin(false);
+      setLoading(false);
+      return;
+    }
 
+    console.log("PROFILE ID:", profile.id);
+    console.log("PROFILE ROLE:", profile.role);
 
-  },[]);
+    if (profile.role === "admin") {
+      console.log("✅ ADMIN TOEGANG TOEGEKEND");
+      setIsAdmin(true);
+    } else {
+      console.log("❌ GEEN ADMIN ROLE");
+      setIsAdmin(false);
+    }
 
+    setLoading(false);
+  };
+
+  checkAdmin();
+}, []);
 
 
 
