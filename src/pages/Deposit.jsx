@@ -10,7 +10,7 @@ export default function Deposit() {
 
   // Wallet adressen per cryptomunt
   const walletAddresses = {
-    USDT: "TJhEwTziQLTo834C3CBbHpiVEb5RSCYJNC",
+    USDT: "TUbmB6N6hZxQHdQ1tWaCwbyckGcvfLR8Fr",
     BTC: "12vr23LBGzPopmkeHngLhEJmgArV91wxi8",
     ETH: "0xb92Fa3CBE7F96a4a212196C1a6D0163c1157ac07"
   };
